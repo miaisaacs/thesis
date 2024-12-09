@@ -1,0 +1,124 @@
+---
+title: "Data Exploration"
+author: "Mia Isaacs"
+date: "2024-12-08"
+output: github_document
+---
+
+### load packages
+
+```{r}
+library(tidyverse)
+```
+
+### clean and limit dataset to only necessary variables
+
+```{r}
+dengueIgG_df = read_csv("data/Dengue_data_analysis_IgG.csv") |> 
+  janitor::clean_names() |> 
+  distinct(probe_sequence, .keep_all = TRUE) |> 
+  select(probe_sequence, starts_with("uwa")) |> 
+  rename_with(~ str_remove_all(., c("uwa_" = "", "_ig_g" = "")))
+
+view(dengueIgG_df)
+```
+
+### separate into data frames based on group and time point
+
+```{r DENV1 serotype}
+denv1_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_d1_"))
+
+view(denv1_df)
+```
+
+```{r DENV2 serotype}
+denv2_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_d2_"))
+
+view(denv2_df)
+```
+
+```{r DENV3 serotype}
+denv3_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_d3_"))
+
+view(denv3_df)
+```
+
+```{r DENV34 serotype}
+denv34_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("d3d4"))
+
+view(denv34_df)
+```
+
+```{r DENV4 serotype}
+denv4_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_d4_"))
+
+view(denv4_df)
+```
+
+```{r nc control}
+nc_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("nc"))
+
+view(nc_df)
+```
+
+```{r z}
+z_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_z_"))
+
+view(z_df)
+```
+
+```{r zd}
+zd_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_zd_"))
+
+view(zd_df)
+```
+
+```{r zdyfv}
+zdyfv_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("zdyfv"))
+
+view(zdyfv_df)
+```
+
+```{r zyfv}
+zyfv_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("zyfv"))
+
+view(zyfv_df)
+```
+
+
+
+```{r}
+dengueIgG_df |> 
+  group_by(probe_sequence) |> 
+  filter(n() > 1)
+```
+
+
+```{r}
+zikvpeptides_df = read_csv("data/ZIKV_peptides_IgG_peptide_frequency.csv")
+
+view(zikvpeptides_df)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
