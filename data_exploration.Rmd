@@ -107,27 +107,52 @@ zyfv_df <- dengueIgG_df |>
 view(zyfv_df)
 ```
 
-
-
+### export probe sequence as FASTA file
 ```{r}
-dengueIgG_df |> 
-  group_by(probe_sequence) |> 
-  filter(n() > 1)
+probe_sequences <- dengueIgG_df$probe_sequence
+names(probe_sequences) <- paste0("Probe_", seq_along(probe_sequences))
+writeXStringSet(AAStringSet(probe_sequences), filepath = "probe_sequences.fasta")
 ```
 
-
+### import alignnment table
 ```{r}
-zikvpeptides_df = read_csv("data/ZIKV_peptides_IgG_peptide_frequency.csv")
+geneious_table1 <- read.csv("data/NC_001477_Annotations_DENV1.csv", header = TRUE)
 
-view(zikvpeptides_df)
+head(geneious_table1)
 ```
 
+```{r}
+geneious_table1 <- geneious_table1 |> 
+  mutate(
+    Minimum = as.numeric(gsub(">", "", Minimum)),  
+    Maximum = as.numeric(gsub(">", "", Maximum)),  
+    Length = as.numeric(gsub(">", "", Length))    
+  )
+```
 
+```{r}
+geneious_table1 <- geneious_table1 |> 
+  arrange(Minimum) |>                
+  distinct(Name, .keep_all = TRUE) |>  
+  mutate(Probe_Number = row_number()) 
+```
 
+```{r}
+visual_test <- denv1a_df |> 
+  left_join(geneious_table1, by = c("probe_sequence" = "Sequence.Name"))
+```
 
-
-
-
+```{r}
+ggplot(visual_test, aes(x = Probe_Number, y = intensity_value, color = Type)) +
+  geom_point() +
+  labs(
+    title = "Probe Binding Positions on DENV Proteome",
+    x = "Probe Number (Ordered by Position)",
+    y = "Intensity Value",
+    color = "Region Type"
+  ) +
+  theme_minimal()
+```
 
 
 
