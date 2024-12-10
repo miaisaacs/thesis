@@ -9,6 +9,7 @@ output: github_document
 
 ```{r}
 library(tidyverse)
+library(Biostrings)
 ```
 
 ### clean and limit dataset to only necessary variables
@@ -25,11 +26,22 @@ view(dengueIgG_df)
 
 ### separate into data frames based on group and time point
 
-```{r DENV1 serotype}
-denv1_df <- dengueIgG_df |> 
-  select(probe_sequence, contains("_d1_"))
+*DENV1 acute*
+```{r DENV1 serotype acute}
+denv1a_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_d1_")) |> 
+  select(probe_sequence, contains("acute"))
 
-view(denv1_df)
+view(denv1a_df)
+```
+
+*DENV1 convalescent*
+```{r DENV1 serotype conv}
+denv1c_df <- dengueIgG_df |> 
+  select(probe_sequence, contains("_d1_")) |> 
+  select(probe_sequence, contains("conv"))
+
+view(denv1c_df)
 ```
 
 ```{r DENV2 serotype}
