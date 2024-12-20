@@ -114,48 +114,25 @@ names(probe_sequences) <- paste0("Probe_", seq_along(probe_sequences))
 writeXStringSet(AAStringSet(probe_sequences), filepath = "probe_sequences.fasta")
 ```
 
-### import alignnment table
+### import reverse translated probe sequences
 ```{r}
-geneious_table1 <- read.csv("data/NC_001477_Annotations_DENV1.csv", header = TRUE)
-
-head(geneious_table1)
+probe_nucleotides <- read_csv("data/probe_sequences (back translated).csv") |> 
+  janitor::clean_names() |> 
+  select(name, sequence)
 ```
 
+### add column to IgG_df for merging purposes
 ```{r}
-geneious_table1 <- geneious_table1 |> 
-  mutate(
-    Minimum = as.numeric(gsub(">", "", Minimum)),  
-    Maximum = as.numeric(gsub(">", "", Maximum)),  
-    Length = as.numeric(gsub(">", "", Length))    
-  )
+dengueIgG_merge <- dengueIgG_df |> 
+  mutate(name = paste0("Probe_", row_number())) |> 
+  select(name, everything())
 ```
 
+### merge by probe name
 ```{r}
-geneious_table1 <- geneious_table1 |> 
-  arrange(Minimum) |>                
-  distinct(Name, .keep_all = TRUE) |>  
-  mutate(Probe_Number = row_number()) 
+dengueIgG_nucleo <- dengueIgG_merge |> 
+  left_join(probe_nucleotides, by = "name") |> 
+  select(name, probe_sequence, sequence, everything())
 ```
-
-```{r}
-visual_test <- denv1a_df |> 
-  left_join(geneious_table1, by = c("probe_sequence" = "Sequence.Name"))
-```
-
-```{r}
-ggplot(visual_test, aes(x = Probe_Number, y = intensity_value, color = Type)) +
-  geom_point() +
-  labs(
-    title = "Probe Binding Positions on DENV Proteome",
-    x = "Probe Number (Ordered by Position)",
-    y = "Intensity Value",
-    color = "Region Type"
-  ) +
-  theme_minimal()
-```
-
-
-
-
 
 
