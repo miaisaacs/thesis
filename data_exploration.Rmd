@@ -12,6 +12,22 @@ library(tidyverse)
 library(Biostrings)
 ```
 
+### view datasets
+
+```{r}
+dengueIgG_all = read_csv("data/Dengue_data_analysis_IgG.csv") |> 
+  janitor::clean_names()
+
+view(dengueIgG_all)
+```
+
+```{r}
+zikaIgG_all = read_csv("data/ZIKV_peptides_IgG_peptide_frequency.csv") |> 
+  janitor::clean_names()
+
+view(zikaIgG_all)
+```
+
 ### clean and limit dataset to only necessary variables
 
 ```{r}
@@ -135,4 +151,15 @@ dengueIgG_nucleo <- dengueIgG_merge |>
   select(name, probe_sequence, sequence, everything())
 ```
 
+
+
+## ZIKV peptides data
+
+### load and clean dataset
+```{r}
+zikvIgG_df = read_csv("data/ZIKV_peptides_IgG_peptide_frequency.csv") |> 
+  janitor::clean_names()
+
+view(zikvIgG_df)
+```
 
