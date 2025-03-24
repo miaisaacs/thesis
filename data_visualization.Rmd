@@ -10,9 +10,12 @@ output: github_document
 ```{r}
 library(tidyverse)
 library(Biostrings)
+library(Pviz)
+library(Gviz)
+library(stringr)
 ```
 
-### view datasets
+### view dataset
 
 ```{r}
 dengueIgG_all = read_csv("data/Dengue_data_analysis_IgG.csv") |> 
@@ -20,6 +23,94 @@ dengueIgG_all = read_csv("data/Dengue_data_analysis_IgG.csv") |>
 
 view(dengueIgG_all)
 ```
+
+
+### format as long dataset
+
+```{r}
+denv_extract <- dengueIgG_all |> 
+  mutate(start_position = as.numeric(str_extract(annotation, "(?<=\\[location=)\\d+")),
+         end_position = as.numeric(str_extract(annotation, "(?<=\\.{2})\\d+")))
+
+denv_long <- denv_extract |> 
+  pivot_longer(cols = matches("uwa_"),
+               names_to = "sample",
+               values_to = "fluorescence")
+
+head(denv_long, 10)
+colnames(denv_long)
+```
+
+### limit dataset to necessary variables
+
+```{r}
+denv_clean <- denv_long |> 
+  select(annotation, probe_sequence, accession, start_position, end_position, sample, fluorescence)
+
+head(denv_clean, 10)
+tail(denv_clean, 10)
+```
+
+### separate into travelers vs. ctrl and timepoints
+```{r, acute}
+all_acute <- dengueIgG_all
+  
+```
+
+```{r, convalescent T1}
+conv_t1 <- dengueIgG_all
+  
+```
+
+```{r, convalescent T2}
+conv_t2 <- dengueIgG_all
+  
+```
+
+```{r, convalescent T3}
+conv_t3 <- dengueIgG_all
+  
+```
+
+```{r, convalescent T4}
+conv_t4 <- dengueIgG_all
+  
+```
+
+```{r, convalescent T5}
+conv_t5 <- dengueIgG_all
+  
+```
+
+```{r, negative control}
+neg_ctrl <- dengueIgG_all
+  
+```
+
+### import start and end positions
+```{r}
+positions_df <- read.csv("data/proteome_positions.csv") |> 
+  janitor::clean_names()
+
+positions_df <- positions_df |> 
+  rename(minimum = start_position,
+         maximum = end_position)
+
+view(positions_df)
+colnames(positions_df)
+```
+
+## mapping humoral response across genome
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
 zikaIgG_all = read_csv("data/ZIKV_peptides_IgG_peptide_frequency.csv") |> 
