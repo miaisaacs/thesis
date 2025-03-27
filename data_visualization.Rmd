@@ -55,10 +55,12 @@ tail(denv_clean, 10)
 ### separate into travelers vs. ctrl and timepoints
 ```{r, acute}
 all_acute <- denv_clean |> 
-  filter(grepl("acute", sample, ignore.case = TRUE))
+  filter(grepl("acute", sample, ignore.case = TRUE)) |> 
+  mutate(observation = row_number())
   
 view(all_acute)
 ```
+
 
 ```{r, convalescent T1}
 conv_t1 <- denv_clean |> 
@@ -116,25 +118,25 @@ view(positions_df)
 ## mapping humoral response across genome (testing using acute samples)
 
 ### convert data frames to tracks
-```{r}
+```{r, acute}
 options(ucscChromosomeNames=FALSE)
 
-features_gr <- GRanges(seqnames = "DENV",
+features_gr1 <- GRanges(seqnames = "DENV",
                        ranges = IRanges(start = positions_df$minimum, end = positions_df$maximum),
                        feature = positions_df$name)
 
-probes_gr <- GRanges(seqnames = "DENV",
+probes_gr1 <- GRanges(seqnames = "DENV",
                      ranges = IRanges(start = all_acute$start_position, end = all_acute$end_position),
                      score = log10(all_acute$fluorescence + 1))
 
-genomic_track <- GeneRegionTrack(features_gr,
+genomic_track1 <- GeneRegionTrack(features_gr,
                                  genome = "DENV",
                                  chromosome = "DENV",
                                  name = "Genomic Features",
                                  col = "black",
                                  fill = "lightblue",
                                  showId = TRUE)
-probe_track <- DataTrack(probes_gr,
+probe_track1 <- DataTrack(probes_gr,
                          genome = "DENV",
                          chromosome = "DENV",
                          name = "Reactivity",
@@ -144,20 +146,24 @@ probe_track <- DataTrack(probes_gr,
 ```
 
 ### create dual x-axis
-```{r}
-genome_axis <- GenomeAxisTrack()
+```{r, acute}
+genome_axis1 <- GenomeAxisTrack()
 
-probe_axis <- GenomeAxisTrack(col = "red")
+probe_axis1 <- GenomeAxisTrack(col = "red")
 ```
 
 ### plot all tracks together
-```{r}
-plotTracks(list(genome_axis, genomic_track, probe_track, probe_axis),
+```{r, acute}
+plotTracks(list(genome_axis1, genomic_track1, probe_track1, probe_axis1),
            from = min(all_acute$start_position), to = max(all_acute$end_position),
            sizes = c(1, 3, 3, 1))
 ```
 
 
+```{r}
+summary(all_acute$start_position)
+summary(all_acute$end_position)
+```
 
 
 
