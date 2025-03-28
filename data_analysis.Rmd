@@ -1,0 +1,72 @@
+---
+title: "Data Analysis"
+author: "Mia Isaacs"
+date: "2025-03-27"
+output: github_document
+---
+
+### load packages
+
+```{r}
+library(tidyverse)
+library(Biostrings)
+library(Pviz)
+library(Gviz)
+library(stringr)
+library(GenomicRanges)
+library(preprocessCore) 
+library(mclust) 
+```
+
+### view dataset
+
+```{r}
+dengueIgG_all = read_csv("data/Dengue_data_analysis_IgG.csv") |> 
+  janitor::clean_names()
+
+view(dengueIgG_all)
+```
+
+### remove unncessary variables
+```{r}
+dengueIgG_clean <- dengueIgG_all |> 
+  select(-accession, -p_val_acute_conv, -p_adjust_acute_conv, -p_val_acute_nc, -p_adjust_acute_nc, -p_val_conv_nc,
+         -p_adjust_conv_nc, -x10, -acute, -conv, -nc, -row_total_x, -control, -d1_acute, -d1_conv, -d2_acute,
+         -d2_conv, -d3_acute, -d3_conv, -d3d4_acute, -d3d4_conv, -d4_acute, -d4_conv,z_conv, -zd_conv, -zdyfv_conv,
+         -zyfv_conv, -row_total_y, -z_conv)
+
+head(dengueIgG_clean)
+```
+
+### check for missing values (all good!)
+```{r}
+sum(is.na(dengueIgG_clean))
+```
+
+### convert to long format for easier manipulation
+```{r}
+dengueIgG_long <- dengueIgG_clean |> 
+  pivot_longer(cols = matches("uwa_"),
+               names_to = "sample",
+               values_to = "fluorescence")
+
+head(dengueIgG_long)
+```
+
+### add log transformed fluorescence values for future analysis
+```{r}
+dengueIgG_transform <- dengueIgG_long |> 
+  mutate(fluorescence_log = log(fluorescence))
+
+head(dengueIgG_transform)
+```
+
+### prepare data for quantile normalization
+```{r}
+view(dengueIgG_transform)
+```
+
+
+
+
+
