@@ -61,12 +61,67 @@ dengueIgG_transform <- dengueIgG_long |>
 head(dengueIgG_transform)
 ```
 
-### prepare data for quantile normalization
+## prepare data for quantile normalization
+
+### extract serotype from sample name
 ```{r}
-view(dengueIgG_transform)
+dengueIgG_serotype <- dengueIgG_transform |> 
+  mutate(serotype = str_extract(sample, "_(d[1-4]d[1-4]|d[1-4]|z|zd|zdyfv|zyfv|nc)_") |>  
+           str_replace_all("_", ""))
 ```
 
+### separate into each serotype or virus
+```{r}
+serotype_list <- dengueIgG_serotype |> 
+  group_split(serotype)
+```
 
+### write function for quantile normalization
+```{r}
+quantile_normalize <- function(df) {
+  # ensure samples are ordered consistently
+  df <- df |>  arrange(sample) 
+  
+  # extract fluorescence values and convert them to a matrix
+  fluorescence_matrix <- as.matrix(df |>  select(fluorescence))
+  
+  # perform quantile normalization
+  fluorescence_norm <- normalize.quantiles(fluorescence_matrix)
+  
+  # add the normalized values back to the data frame
+  df$fluorescence_norm <- as.vector(fluorescence_norm)
+  
+  return(df)
+}
+```
 
+### normalize across each serotype
+```{r}
+# create an empty list to store the normalized data
+serotype_list_norm <- list()
+
+# loop through each serotype group and apply quantile normalization
+for (i in seq_along(serotype_list)) {
+  # apply quantile normalization to the current group
+  serotype_list_norm[[i]] <- quantile_normalize(serotype_list[[i]])
+}
+
+dengueIgG_norm <- bind_rows(serotype_list_norm)
+
+head(dengueIgG_norm)
+```
+
+```{r}
+dengueIgG_norm |> 
+  summarize(
+    mean_fluorescence = mean(fluorescence, na.rm = TRUE),
+    median_fluorescence = median(fluorescence, na.rm = TRUE),
+    sd_fluorescence = sd(fluorescence, na.rm = TRUE),
+    
+    mean_fluorescence_norm = mean(fluorescence_norm, na.rm = TRUE),
+    median_fluorescence_norm = median(fluorescence_norm, na.rm = TRUE),
+    sd_fluorescence_norm = sd(fluorescence_norm, na.rm = TRUE)
+  )
+```
 
 
