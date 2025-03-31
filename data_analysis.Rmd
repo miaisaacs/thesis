@@ -16,6 +16,9 @@ library(stringr)
 library(GenomicRanges)
 library(preprocessCore) 
 library(mclust) 
+library(lme4)
+library(pROC)
+library(DescTools)
 ```
 
 ### view dataset
@@ -134,3 +137,242 @@ ggplot(sample_n(dengueIgG_serotype, 5000), aes(x = fluorescence_norm)) +
 ```
 
 according to the summary statistics and density plots, the normalized fluorescence values are identical to the original fluorescence values. therefore, quantile normalization was not necessary for this dataset but will be maintained until completion of the analysis. (may not be included in report)
+
+## separation into serotype-specific and acute vs. conv data frames
+```{r, d1 acute}
+normal_d1_acute <- dengueIgG_serotype |> 
+  filter(serotype == "d1", str_detect(sample, "acute"))
+```
+
+```{r, d1 conv}
+normal_d1_conv <- dengueIgG_serotype |> 
+  filter(serotype == "d1", str_detect(sample, "conv"))
+```
+
+```{r, d2 acute}
+normal_d2_acute <- dengueIgG_serotype |> 
+  filter(serotype == "d2", str_detect(sample, "acute"))
+```
+
+```{r, d2 conv}
+normal_d2_conv <- dengueIgG_serotype |> 
+  filter(serotype == "d2", str_detect(sample, "conv"))
+```
+
+```{r, d3 acute}
+normal_d3_acute <- dengueIgG_serotype |> 
+  filter(serotype == "d3", str_detect(sample, "acute"))
+```
+
+```{r, d3 conv}
+normal_d3_conv <- dengueIgG_serotype |> 
+  filter(serotype == "d3", , str_detect(sample, "conv"))
+```
+
+```{r, d4 acute}
+normal_d4_acute <- dengueIgG_serotype |> 
+  filter(serotype == "d4", , str_detect(sample, "acute"))
+```
+
+```{r, d3d4 acute}
+normal_d3d4_acute <- dengueIgG_serotype |> 
+  filter(serotype == "d3d4", str_detect(sample, "acute"))
+```
+
+```{r, d3d4 conv}
+normal_d3d4_conv <- dengueIgG_serotype |> 
+  filter(serotype == "d3d4", str_detect(sample, "conv"))
+```
+
+the remaining serotype groups have only convalescent samples!
+
+```{r, z}
+normal_z <- dengueIgG_serotype |> 
+  filter(serotype == "z")
+```
+
+```{r, zd}
+normal_zd <- dengueIgG_serotype |> 
+  filter(serotype == "zd")
+```
+
+```{r, zdyfv}
+normal_zdyfv <- dengueIgG_serotype |> 
+  filter(serotype == "zdyfv")
+```
+
+```{r, zyfv}
+normal_zyfv <- dengueIgG_serotype |> 
+  filter(serotype == "zyfv")
+```
+
+```{r, nc}
+normal_nc <- dengueIgG_serotype |> 
+  filter(serotype == "nc")
+```
+
+## creating VARscore to use in identification of significant reactive epitopes
+
+### fit bimodal distribution using E-M algorithim
+```{r}
+# fit Gaussian Mixture Model (GMM) to fluorescence values using mclust
+gmm <- Mclust(dengueIgG_serotype$fluorescence_norm, G = 2) # G = 2 specifies bimodal distribution
+
+# extract parameters for noise distribution (assume it's the smaller mean)
+noise_component <- which.min(gmm$parameters$mean) # index of noise component
+mean_noise <- gmm$parameters$mean[noise_component]
+sd_noise <- sqrt(gmm$parameters$variance$sigmasq[noise_component])
+
+# calculate threshold
+threshold <- mean_noise + 2 * sd_noise
+print(paste("Threshold:", threshold))
+```
+
+### adjust MFI values
+```{r}
+# subtract threshold from reactivity values and set negatives to zero
+dengueIgG_serotype <- dengueIgG_serotype |> 
+  mutate(adjusted_reactivity = pmax(fluorescence_norm - threshold, 0)) # pmax ensures no negative values
+
+head(dengueIgG_serotype)
+```
+
+### calculate intensity and breadth
+```{r}
+# summarize intensity and breadth for each virus in each sample
+varscore_components <- dengueIgG_serotype |> 
+  group_by(sample, serotype) |> 
+  summarize(
+    intensity = sum(adjusted_reactivity, na.rm = TRUE), # sum of adjusted reactivities
+    breadth = mean(adjusted_reactivity > 0, na.rm = TRUE), # proportion of positive peptides
+    .groups = "drop"
+  )
+```
+
+### normalize scores
+```{r}
+# normalize intensity and breadth by maximum values across all samples
+varscore_components <- varscore_components |> 
+  group_by(sample) |> 
+  mutate(
+    norm_intensity = ifelse(max(intensity, na.rm = TRUE) == 0, 0, intensity / max(intensity, na.rm = TRUE)),
+    norm_breadth = ifelse(max(breadth, na.rm = TRUE) == 0, 0, breadth / max(breadth, na.rm = TRUE))
+  ) |> 
+  ungroup() |> 
+  mutate(VARscore = norm_intensity * 0.7 + norm_breadth * 0.3)
+
+print(head(varscore_components))
+print(tail(varscore_components))
+```
+
+### validate VARscores
+```{r}
+virus_pattern <- "_(d[1-4]d[1-4]|d[1-4]|z|zd|zdyfv|zyfv|nc)_"
+
+varscore_components <- varscore_components |> 
+  mutate(
+    is_positive = ifelse(str_detect(serotype, virus_pattern), 1, 0)
+  )
+
+print(head(varscore_components))
+
+# Step 8: ROC Analysis
+roc_curve <- roc(varscore_components$is_positive, varscore_components$VARscore)
+
+# Print and plot ROC curve
+print(roc_curve)
+plot(roc_curve, main = "ROC Curve for VARscore")
+```
+
+
+
+
+### preparing data for creation of VARscore
+```{r}
+dengueIgG_serotype <- dengueIgG_serotype |> 
+  mutate(
+    sample_id = str_extract(sample, "(?<=_)[0-9]+(_[0-9]+)?"), 
+    patient_id = str_extract(sample_id, "^[0-9]+"),
+    timepoint = if_else(str_detect(sample_id, "_"), str_extract(sample_id, "(?<=_)[0-9]+"), NA_character_)
+  )
+
+head(dengueIgG_serotype)
+tail(dengueIgG_serotype)
+```
+
+### calculate baseline reactivity
+```{r}
+baseline <- dengueIgG_serotype |> 
+  group_by(patient_id, serotype, probe_sequence) |> 
+  filter(timepoint == min(timepoint)) |> 
+  summarize(baseline_reactivity = mean(fluorescence_norm, na.rm = TRUE),
+            .groups = 'drop')
+```
+
+### merge basline reactivity
+```{r}
+dengueIgG_serotype <- dengueIgG_serotype |> 
+  left_join(baseline, by = c("patient_id", "serotype", "probe_sequence"))
+```
+
+### calculate change in reactivity
+```{r}
+dengueIgG_serotype <- dengueIgG_serotype |>
+  mutate(delta_reactivity = fluorescence - baseline_reactivity)
+```
+
+### define patient-specific threshold
+```{r}
+threshold <- dengueIgG_serotype |> 
+  group_by(patient_id, serotype) |> 
+  summarize(
+    threshold = 2 * sd(baseline_reactivity, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+dengueIgG_serotype <- dengueIgG_serotype |>
+  left_join(threshold, by = c("patient_id", "serotype"))
+```
+
+### mark significant changes
+```{r}
+dengueIgG_serotype <- dengueIgG_serotype |>
+  mutate(significant_change = ifelse(abs(delta_reactivity) > threshold, 1, 0))
+```
+
+### calculate intensity and breadth of change
+```{r}
+varscore_components <- dengueIgG_serotype |> 
+  group_by(patient_id, serotype, timepoint) |> 
+  summarize(
+    intensity_of_change = sum(delta_reactivity[significant_change == 1], na.rm = TRUE),
+    breadth_of_change = mean(significant_change, na.rm = TRUE),
+    .groups = 'drop'
+  )
+```
+
+### normalize intensity and breadth across timepoints for each patient/serotype
+```{r}
+varscore_components <- varscore_components |> 
+  group_by(patient_id, serotype) |> 
+  mutate(
+    norm_intensity = intensity_of_change / max(abs(intensity_of_change), na.rm = TRUE),
+    norm_breadth = breadth_of_change / max(breadth_of_change, na.rm = TRUE)
+  ) |> 
+  ungroup()
+```
+
+### handle NAN for proper visualization
+```{r}
+varscore_components <- varscore_components %>%
+  mutate(across(where(is.numeric), ~ifelse(is.nan(.), 0, .)))
+```
+
+### calculate time-adjusted VARscore
+```{r}
+varscore_components <- varscore_components |> 
+  mutate(VARscore = 0.7 * norm_intensity + 0.3 * norm_breadth)
+```
+
+
+
