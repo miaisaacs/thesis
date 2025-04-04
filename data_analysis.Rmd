@@ -211,31 +211,78 @@ normal_nc <- dengueIgG_serotype |>
   filter(serotype == "nc")
 ```
 
-## creating VARscore to use in identification of significant reactive epitopes
 
-### fit bimodal distribution using E-M algorithim
+## determine threshold for significance
+
+### write function for em threshold
 ```{r}
-# fit Gaussian Mixture Model (GMM) to fluorescence values using mclust
-gmm <- Mclust(dengueIgG_serotype$fluorescence_norm, G = 2) # G = 2 specifies bimodal distribution
-
-# extract parameters for noise distribution (assume it's the smaller mean)
-noise_component <- which.min(gmm$parameters$mean) # index of noise component
-mean_noise <- gmm$parameters$mean[noise_component]
-sd_noise <- sqrt(gmm$parameters$variance$sigmasq[noise_component])
-
-# calculate threshold
-threshold <- mean_noise + 2 * sd_noise
-print(paste("Threshold:", threshold))
+em_threshold <- function(mfi_values) {
+  # fit a Gaussian mixture model with 2 components (noise and signal)
+  fit <- Mclust(mfi_values, G = 2)
+  
+  # get parameters of the two components
+  means <- fit$parameters$mean
+  sds <- sqrt(fit$parameters$variance$sigmasq)
+  
+  # identify noise distribution (lower mean component)
+  noise_component <- which.min(means)
+  mean_noise <- means[noise_component]
+  sd_noise <- sds[noise_component]
+  
+  # calculate threshold (mean + 2SD of noise distribution)
+  threshold <- mean_noise + 2 * sd_noise
+  return(threshold)
+}
 ```
 
-### adjust MFI values
+### apply function to dataset
 ```{r}
-# subtract threshold from reactivity values and set negatives to zero
-dengueIgG_serotype <- dengueIgG_serotype |> 
-  mutate(adjusted_reactivity = pmax(fluorescence_norm - threshold, 0)) # pmax ensures no negative values
-
-head(dengueIgG_serotype)
+processed_data <- dengueIgG_serotype |> 
+  group_by(sample_id) |>
+  mutate(
+    threshold = em_threshold(fluorescence_norm),
+    mfi_adjusted = pmax(fluorescence_norm - threshold, 0) 
+  ) |> 
+  ungroup()
 ```
+
+### write function for visualization of MFI with EM threshold
+```{r}
+plot_threshold_distribution <- function(sample_data) {
+  sample_data |> 
+    ggplot(aes(x = fluorescence_norm)) +
+    geom_histogram(aes(y = ..density..), bins = 50, fill = "lightblue") +
+    geom_density(color = "darkblue", linewidth = 1) +
+    geom_vline(aes(xintercept = threshold), color = "red", linetype = "dashed", linewidth = 1) +
+    labs(title = "MFI Distribution with E-M Threshold",
+         x = "MFI Value",
+         y = "Density") +
+    theme_minimal()
+}
+```
+
+### apply to sample as an example
+```{r}
+sample_1_data <- processed_data |>  
+  filter(sample_id == unique(processed_data$sample_id)[1])
+plot_threshold_distribution(sample_1_data)
+```
+
+### view processed dataset
+```{r}
+view(head(processed_data, 100))
+view(tail(processed_data, 100))
+```
+
+
+
+
+
+
+
+
+
+
 
 ### calculate intensity and breadth
 ```{r}
