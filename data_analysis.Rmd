@@ -19,6 +19,9 @@ library(mclust)
 library(lme4)
 library(pROC)
 library(DescTools)
+library(forcats)
+library(scales)
+library(viridis)
 ```
 
 ### view dataset
@@ -27,7 +30,7 @@ library(DescTools)
 dengueIgG_all = read_csv("data/Dengue_data_analysis_IgG.csv") |> 
   janitor::clean_names()
 
-view(dengueIgG_all)
+view(head(dengueIgG_all, 100))
 ```
 
 ### remove unncessary variables
@@ -138,6 +141,19 @@ ggplot(sample_n(dengueIgG_serotype, 5000), aes(x = fluorescence_norm)) +
 
 according to the summary statistics and density plots, the normalized fluorescence values are identical to the original fluorescence values. therefore, quantile normalization was not necessary for this dataset but will be maintained until completion of the analysis. (may not be included in report)
 
+### extract necessary details from annotations
+```{r}
+dengueIgG_serotype <- dengueIgG_serotype |> 
+  mutate(
+    sample_id = str_extract(sample, "(?<=_)[0-9]+(_[0-9]+)?"), 
+    patient_id = str_extract(sample_id, "^[0-9]+"),
+    timepoint = if_else(str_detect(sample_id, "_"), str_extract(sample_id, "(?<=_)[0-9]+"), NA_character_)
+  )
+
+head(dengueIgG_serotype)
+tail(dengueIgG_serotype)
+```
+
 ## separation into serotype-specific and acute vs. conv data frames
 ```{r, d1 acute}
 normal_d1_acute <- dengueIgG_serotype |> 
@@ -172,6 +188,11 @@ normal_d3_conv <- dengueIgG_serotype |>
 ```{r, d4 acute}
 normal_d4_acute <- dengueIgG_serotype |> 
   filter(serotype == "d4", , str_detect(sample, "acute"))
+```
+
+```{r, d4 conv}
+normal_d4_conv <- dengueIgG_serotype |> 
+  filter(serotype == "d4", , str_detect(sample, "conv"))
 ```
 
 ```{r, d3d4 acute}
@@ -211,7 +232,6 @@ normal_nc <- dengueIgG_serotype |>
   filter(serotype == "nc")
 ```
 
-
 ## determine threshold for significance
 
 ### write function for em threshold
@@ -241,7 +261,8 @@ processed_data <- dengueIgG_serotype |>
   group_by(sample_id) |>
   mutate(
     threshold = em_threshold(fluorescence_norm),
-    mfi_adjusted = pmax(fluorescence_norm - threshold, 0) 
+    mfi_adjusted = pmax(fluorescence_norm - threshold, 0),
+    hit_yn = if_else(mfi_adjusted > 0, 1, 0)
   ) |> 
   ungroup()
 ```
@@ -275,6 +296,76 @@ view(tail(processed_data, 100))
 ```
 
 
+## normalize data and create heatmaps
+
+### add protein id column
+```{r}
+processed_data <- processed_data |> 
+  mutate(protein = str_extract(annotation, "(?<=protein_id=)[A-Z]{2}_\\d+\\.\\d+"))
+
+view(head(processed_data, 100))
+```
+
+### create data frame with total peptides per virus
+```{r}
+total_peptides_per_virus <- processed_data |>
+  group_by(serotype, timepoint) |>
+  summarise(total_peptides = n_distinct(probe_sequence, na.rm = TRUE), .groups = "drop")
+
+print(total_peptides_per_virus)
+```
+
+### count reactive peptides per serotype & timepoint
+```{r}
+reactive_peptide_counts <- processed_data |>
+  filter(hit_yn == 1) |> 
+  distinct(serotype, timepoint, probe_sequence) |>
+  group_by(serotype, timepoint) |> 
+  summarize(
+    reactive_peptides = n(),
+    .groups = "drop"
+  )
+
+print(head(reactive_peptide_counts))
+```
+
+### normalize number of hits within each serotype & timepoint
+```{r}
+normalized_hit_counts <- reactive_peptide_counts |> 
+  left_join(total_peptides_per_virus, by = c("serotype", "timepoint"))   |> 
+  mutate(
+    normalized_count = (reactive_peptides / total_peptides) * 100
+  ) |> 
+  filter(!is.na(timepoint))
+
+print(head(normalized_hit_counts))
+```
+
+### order data for plotting
+```{r}
+normalized_hit_counts$serotype <- fct_rev(factor(normalized_hit_counts$serotype, 
+                                                 levels = c("d1", "d2", "d3", "d4",
+                                                            "d3d4", "z", "zd", "zyfv",
+                                                            "zdyfv", "nc")))
+```
+
+### create heatmap
+```{r}
+ggplot(normalized_hit_counts, aes(x = timepoint, y = serotype, fill = normalized_count)) +
+  geom_tile() +
+  scale_fill_gradientn(
+    colours = rev(heat.colors(100)), 
+    labels = function(x) paste0(round(x, 1), "%")
+  ) +
+  labs(
+    title = "Heatmap of Normalized Peptide Counts",
+    x = "Timepoint",
+    y = "Serotype",
+    fill = "Normalized Count (%)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 
 
