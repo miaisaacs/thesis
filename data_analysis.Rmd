@@ -289,10 +289,44 @@ sample_1_data <- processed_data |>
 plot_threshold_distribution(sample_1_data)
 ```
 
+### capture start and end positions
+```{r}
+processed_data <- processed_data |> 
+  mutate(
+    location = str_extract(annotation, "(?<=location=)\\d+\\.\\.\\d+"),
+    start_pos = as.integer(str_extract(location, "^\\d+")),
+    end_pos = as.integer(str_extract(location, "\\d+$"))
+  )
+```
+
 ### view processed dataset
 ```{r}
 view(head(processed_data, 100))
 view(tail(processed_data, 100))
+```
+
+### import data from geneious prime
+```{r}
+denv1_protein_regions <- read.csv("data/probe_sequences2.csv")
+
+denv1_protein_regions <- denv1_protein_regions |> 
+  select(Name, Minimum, Maximum)
+
+print(denv1_protein_regions)
+```
+
+### match start and end positions to protein
+```{r}
+processed_data <- processed_data |>
+  rowwise() |>
+  mutate(
+    protein = denv1_protein_regions$Name[
+      which(start_pos >= denv1_protein_regions$Minimum & start_pos <= denv1_protein_regions$Maximum)
+    ][1]  
+  ) |>
+  ungroup()
+
+head(processed_data)
 ```
 
 
@@ -349,7 +383,7 @@ normalized_hit_counts$serotype <- fct_rev(factor(normalized_hit_counts$serotype,
                                                             "zdyfv", "nc")))
 ```
 
-### create heatmap
+### create heatmap by serotype
 ```{r}
 ggplot(normalized_hit_counts, aes(x = timepoint, y = serotype, fill = normalized_count)) +
   geom_tile() +
@@ -367,7 +401,52 @@ ggplot(normalized_hit_counts, aes(x = timepoint, y = serotype, fill = normalized
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+### repeat process for heatmap by protein
+```{r}
+total_peptides_per_protein <- processed_data |>
+  group_by(protein, timepoint) |>
+  summarise(total_peptides = n_distinct(probe_sequence, na.rm = TRUE), .groups = "drop")
+```
 
+### count reactive peptides
+```{r}
+reactive_peptide_counts <- processed_data |>
+  filter(hit_yn == 1) |> 
+  distinct(protein, timepoint, probe_sequence) |>
+  group_by(protein, timepoint) |> 
+  summarize(
+    reactive_peptides = n(),
+    .groups = "drop"
+  )
+```
+
+### normalize within each peptide and timepoint
+```{r}
+normalized_hit_counts <- reactive_peptide_counts |> 
+  left_join(total_peptides_per_protein, by = c("protein", "timepoint")) |> 
+  mutate(
+    normalized_count = (reactive_peptides / total_peptides) * 100
+  ) |> 
+  filter(!is.na(timepoint))
+```
+
+### create heatmap by protein
+```{r}
+ggplot(normalized_hit_counts, aes(x = timepoint, y = protein, fill = normalized_count)) +
+  geom_tile() +
+  scale_fill_gradientn(
+    colours = rev(heat.colors(100)), 
+    labels = function(x) paste0(round(x, 1), "%")
+  ) +
+  labs(
+    title = "Heatmap of Normalized Peptide Counts by Protein",
+    x = "Timepoint",
+    y = "Protein",
+    fill = "Normalized Count (%)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 
 
