@@ -310,25 +310,11 @@ view(tail(processed_data, 100))
 denv1_protein_regions <- read.csv("data/probe_sequences2.csv")
 
 denv1_protein_regions <- denv1_protein_regions |> 
+  mutate(Name = ifelse(!is.na(product) & str_trim(product) != "", product, Name)) |> 
   select(Name, Minimum, Maximum)
 
-print(denv1_protein_regions)
+view(denv1_protein_regions)
 ```
-
-### match start and end positions to protein
-```{r}
-processed_data <- processed_data |>
-  rowwise() |>
-  mutate(
-    protein = denv1_protein_regions$Name[
-      which(start_pos >= denv1_protein_regions$Minimum & start_pos <= denv1_protein_regions$Maximum)
-    ][1]  
-  ) |>
-  ungroup()
-
-head(processed_data)
-```
-
 
 ## normalize data and create heatmaps
 
@@ -401,6 +387,62 @@ ggplot(normalized_hit_counts, aes(x = timepoint, y = serotype, fill = normalized
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+## make heatmap by protein
+
+### clean data to limit to only necessary proteins
+```{r}
+target_proteins <- c(
+  "capsid protein C", 
+  "protein pr", 
+  "membrane glycoprotein M", 
+  "envelope protein E", 
+  "nonstructural protein NS1", 
+  "nonstructural protein NS2A", 
+  "nonstructural protein NS2B", 
+  "nonstructural protein NS3", 
+  "nonstructural protein NS4A", 
+  "nonstructural protein NS4B", 
+  "RNA-dependent RNA polymerase NS5"
+)
+
+protein_locations <- denv1_protein_regions |>
+  filter(Name %in% target_proteins) |>
+  arrange(Minimum)
+
+protein_locations <- protein_locations |>
+  mutate(
+    Protein = case_when(
+      str_detect(Name, "capsid") ~ "C",
+      str_detect(Name, "protein pr") ~ "pr",
+      str_detect(Name, "glycoprotein M") ~ "M",
+      str_detect(Name, "envelope protein E") ~ "E",
+      str_detect(Name, "NS1") ~ "NS1",
+      str_detect(Name, "NS2A") ~ "NS2A",
+      str_detect(Name, "NS2B") ~ "NS2B",
+      str_detect(Name, "NS3") ~ "NS3",
+      str_detect(Name, "NS4A") ~ "NS4A",
+      str_detect(Name, "NS4B") ~ "NS4B",
+      str_detect(Name, "NS5") ~ "NS5"
+    )
+  )
+
+view(protein_locations)
+```
+
+### match probe start and end positions to protein
+```{r}
+processed_data <- processed_data |>
+  rowwise() |>
+  mutate(
+    protein = protein_locations$Protein[
+      which(start_pos >= protein_locations$Minimum & start_pos <= protein_locations$Maximum)
+    ][1]
+  ) |>
+  ungroup()
+
+view(head(processed_data))
+```
+
 ### repeat process for heatmap by protein
 ```{r}
 total_peptides_per_protein <- processed_data |>
@@ -448,6 +490,11 @@ ggplot(normalized_hit_counts, aes(x = timepoint, y = protein, fill = normalized_
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+```{r}
+maybe_working <- read_csv("data/help.csv")
+
+view(maybe_working)
+```
 
 
 

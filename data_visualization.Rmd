@@ -22,7 +22,7 @@ library(GenomicRanges)
 dengueIgG_all = read_csv("data/Dengue_data_analysis_IgG.csv") |> 
   janitor::clean_names()
 
-view(dengueIgG_all)
+view(head(dengueIgG_all, 100))
 ```
 
 

@@ -1,0 +1,38 @@
+Name,Type,Minimum,Maximum,Length,product,Type
+sfRNA1,ncRNA,10320,10735,416,sfRNA1,ncRNA
+POLY peptide,mat_peptide,6827,7573,747,nonstructural protein NS4B,mat_peptide
+sfRNA3,ncRNA,10463,10735,273,sfRNA3,ncRNA
+POLY peptide,mat_peptide,6758,6826,69,protein 2K,mat_peptide
+capsid region hairpin (cHP) stem loop,stem_loop,114,130,17,,stem_loop
+stem-loop B (SLB) stem loop,stem_loop,79,93,15,,stem_loop
+5' upstream AUG region (UAR) regulatory,regulatory,79,94,16,,regulatory
+3' stem-loop (3'SL) stem loop,stem_loop,10657,10735,79,,stem_loop
+POLY peptide,mat_peptide,6377,6757,381,nonstructural protein NS4A,mat_peptide
+POLY peptide,mat_peptide,4130,4519,390,nonstructural protein NS2B,mat_peptide
+stem loop,stem_loop,10397,10458,62,,stem_loop
+stem loop,stem_loop,10324,10389,66,,stem_loop
+5'UTR,5'UTR,1,94,94,,5'UTR
+source dengue virus type 1,source,1,10735,10735,,source
+POLY peptide,mat_peptide,95,394,300,capsid protein C,mat_peptide
+POLY peptide,mat_peptide,95,436,342,anchored capsid protein ancC,mat_peptide
+POLY CDS,CDS,95,10273,10179,polyprotein,CDS
+POLY gene,gene,95,10273,10179,,gene
+sfRNA2,ncRNA,10393,10735,343,sfRNA2,ncRNA
+POLY peptide,mat_peptide,935,2419,1485,envelope protein E,mat_peptide
+3' upstream AUG region (UAR) regulatory,regulatory,10654,10670,17,,regulatory
+regulatory,regulatory,10630,10640,11,,regulatory
+short hairpin (sHP) stem loop,stem_loop,10643,10656,14,,stem_loop
+POLY peptide,mat_peptide,2420,3475,1056,nonstructural protein NS1,mat_peptide
+3'UTR,3'UTR,10274,10735,462,,3'UTR
+stem loop,stem_loop,10551,10633,83,,stem_loop
+sfRNA4,ncRNA,10551,10735,185,sfRNA4,ncRNA
+POLY peptide,mat_peptide,7574,10270,2697,RNA-dependent RNA polymerase NS5,mat_peptide
+stem loop,stem_loop,10467,10549,83,,stem_loop
+POLY peptide,mat_peptide,3476,4129,654,nonstructural protein NS2A,mat_peptide
+stem-loop A (SLA) stem loop,stem_loop,2,69,68,,stem_loop
+regulatory,regulatory,132,142,11,,regulatory
+POLY peptide,mat_peptide,4520,6376,1857,nonstructural protein NS3,mat_peptide
+POLY peptide,mat_peptide,710,934,225,membrane glycoprotein M,mat_peptide
+POLY peptide,mat_peptide,437,709,273,protein pr,mat_peptide
+POLY peptide,mat_peptide,437,934,498,membrane glycoprotein precursor prM,mat_peptide
+oligo U track spacer regulatory,regulatory,70,78,9,,regulatory
