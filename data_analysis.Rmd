@@ -22,6 +22,7 @@ library(DescTools)
 library(forcats)
 library(scales)
 library(viridis)
+library(ggeffects)
 ```
 
 ### view dataset
@@ -497,7 +498,69 @@ view(maybe_working)
 ```
 
 
+## linear mixed effects model
 
+### fit basic model
+```{r}
+# make sure timepoint is ordered/numeric
+processed_data$timepoint <- as.numeric(as.character(processed_data$timepoint))
+
+# fit mixed effects model
+basic_model <- lmer(
+  fluorescence_norm ~ timepoint + (1 | patient_id), 
+  data = processed_data
+)
+
+summary(basic_model)
+```
+
+### fit basic model in log scale (?)
+```{r}
+basic_log_model <- lmer(
+  fluorescence_log ~ timepoint + (1 | patient_id), 
+  data = processed_data
+)
+
+summary(basic_log_model)
+```
+
+### fit model with interaction by serotype
+```{r}
+serotype_model <- lmer(
+  fluorescence_norm ~ timepoint * serotype + (1 | patient_id), 
+  data = processed_data
+)
+
+summary(serotype_model)
+```
+
+### fit model with interaction in log scale 
+```{r}
+serotype_model_log <- lmer(
+  fluorescence_log ~ timepoint * serotype + (1 | patient_id), 
+  data = processed_data
+)
+
+summary(serotype_model_log)
+```
+
+### plot responses by serotype across timepoints
+```{r}
+# get predicted log fluorescence values over time for each serotype
+preds <- ggpredict(serotype_model_log, terms = c("timepoint", "serotype"))
+
+ggplot(preds, aes(x = x, y = predicted, color = group, fill = group)) +
+  geom_line(linewidth = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2, color = NA) +
+  labs(
+    title = "Predicted Antibody Dynamics Over Time by Serotype",
+    x = "Timepoint",
+    y = "Log Fluorescence",
+    color = "Serotype",
+    fill = "Serotype"
+  ) +
+  theme_minimal(base_size = 14)
+```
 
 
 
