@@ -409,96 +409,64 @@ ggplot(normalized_hit_counts, aes(x = timepoint, y = serotype, fill = normalized
 
 ## make heatmap by protein
 
-### clean data to limit to only necessary proteins
+### count peptides per protein
 ```{r}
-target_proteins <- c(
-  "capsid protein C", 
-  "protein pr", 
-  "membrane glycoprotein M", 
-  "envelope protein E", 
-  "nonstructural protein NS1", 
-  "nonstructural protein NS2A", 
-  "nonstructural protein NS2B", 
-  "nonstructural protein NS3", 
-  "nonstructural protein NS4A", 
-  "nonstructural protein NS4B", 
-  "RNA-dependent RNA polymerase NS5"
-)
-
-protein_locations <- denv1_protein_regions |>
-  filter(Name %in% target_proteins) |>
-  arrange(Minimum)
-
-protein_locations <- protein_locations |>
-  mutate(
-    Protein = case_when(
-      str_detect(Name, "capsid") ~ "C",
-      str_detect(Name, "protein pr") ~ "pr",
-      str_detect(Name, "glycoprotein M") ~ "M",
-      str_detect(Name, "envelope protein E") ~ "E",
-      str_detect(Name, "NS1") ~ "NS1",
-      str_detect(Name, "NS2A") ~ "NS2A",
-      str_detect(Name, "NS2B") ~ "NS2B",
-      str_detect(Name, "NS3") ~ "NS3",
-      str_detect(Name, "NS4A") ~ "NS4A",
-      str_detect(Name, "NS4B") ~ "NS4B",
-      str_detect(Name, "NS5") ~ "NS5"
-    )
+total_peptides_per_protein <- final_df_long |>
+  group_by(protein, timepoint) |>
+  summarise(
+    total_peptides = n_distinct(sequence, na.rm = TRUE),
+    .groups = "drop"
   )
 
-view(protein_locations)
+print(total_peptides_per_protein)
 ```
 
-### match probe start and end positions to protein
+### count reactive peptides per protein
 ```{r}
-processed_data <- processed_data |>
-  rowwise() |>
-  mutate(
-    protein = protein_locations$Protein[
-      which(start_pos >= protein_locations$Minimum & start_pos <= protein_locations$Maximum)
-    ][1]
-  ) |>
-  ungroup()
-
-view(head(processed_data))
-```
-
-### repeat process for heatmap by protein
-```{r}
-total_peptides_per_protein <- processed_data |>
-  group_by(protein, timepoint) |>
-  summarise(total_peptides = n_distinct(probe_sequence, na.rm = TRUE), .groups = "drop")
-```
-
-### count reactive peptides
-```{r}
-reactive_peptide_counts <- processed_data |>
+reactive_peptide_counts_protein <- final_df_long |>
   filter(hit_yn == 1) |> 
-  distinct(protein, timepoint, probe_sequence) |>
+  distinct(protein, timepoint, sequence) |>
   group_by(protein, timepoint) |> 
-  summarize(
+  summarise(
     reactive_peptides = n(),
     .groups = "drop"
   )
+
+print(head(reactive_peptide_counts_protein))
 ```
 
-### normalize within each peptide and timepoint
+### normalize hit counts
 ```{r}
-normalized_hit_counts <- reactive_peptide_counts |> 
+normalized_hit_counts_protein <- reactive_peptide_counts_protein |> 
   left_join(total_peptides_per_protein, by = c("protein", "timepoint")) |> 
   mutate(
     normalized_count = (reactive_peptides / total_peptides) * 100
   ) |> 
-  filter(!is.na(timepoint))
+  filter(!is.na(timepoint))  # remove any missing timepoints just in case
+
+print(head(normalized_hit_counts_protein))
+
 ```
 
-### create heatmap by protein
+### set order of proteins by genome
 ```{r}
-ggplot(normalized_hit_counts, aes(x = timepoint, y = protein, fill = normalized_count)) +
-  geom_tile() +
+genome_protein_order <- c("C", "prM", "E", "NS1", "NS2A", "NS2B", "NS3", "NS4A", "NS4B", "NS5")
+
+normalized_hit_counts_protein$protein <- factor(
+  normalized_hit_counts_protein$protein,
+  levels = genome_protein_order
+) |> 
+  fct_rev()
+```
+
+### plot heatmap of protein by timepoint
+```{r}
+ggplot(normalized_hit_counts_protein, aes(x = timepoint, y = protein, fill = normalized_count)) +
+  geom_tile(color = "white") +
   scale_fill_gradientn(
-    colours = rev(heat.colors(100)), 
-    labels = function(x) paste0(round(x, 1), "%")
+    colours = rev(heat.colors(100)),
+    labels = function(x) paste0(round(x, 1), "%"),
+    na.value = "grey90"
   ) +
   labs(
     title = "Heatmap of Normalized Peptide Counts by Protein",
@@ -507,14 +475,46 @@ ggplot(normalized_hit_counts, aes(x = timepoint, y = protein, fill = normalized_
     fill = "Normalized Count (%)"
   ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
 ```
 
+
+## making plots foor reactivity across genome for each serotype and timepoint
+
+### set midpoint for easier plotting
 ```{r}
-maybe_working <- read_csv("data/help.csv")
+figure3_df <- final_df_long |> 
+  mutate(midpoint = (start + end) / 2) |> 
+  filter(hit_yn == 1)
 
-view(maybe_working)
+ggplot(figure3_df, aes(x = midpoint, y = fluorescence_log)) +
+  geom_point(alpha = 0.7, size = 1.5, color = "blue") +
+  facet_grid(serotype ~ timepoint) +  
+  labs(
+    title = "Fluorescence (log-transformed) Across DENV1 Genome",
+    x = "Genome Position (Midpoint of Probe)",
+    y = "Fluorescence (log10 scale)"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 8),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
 ```
+
+
+
+
+
+
+
+
+
+
 
 
 ## linear mixed effects model
