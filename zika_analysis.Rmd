@@ -1,0 +1,39 @@
+---
+title: "ZIKV Analysis"
+author: "Mia Isaacs"
+date: "2025-04-19"
+output: github_document
+---
+
+### load packages
+
+```{r}
+library(tidyverse)
+library(Biostrings)
+library(Pviz)
+library(Gviz)
+library(stringr)
+library(GenomicRanges)
+library(preprocessCore) 
+library(mclust) 
+library(lme4)
+library(pROC)
+library(DescTools)
+library(forcats)
+library(scales)
+library(viridis)
+library(ggeffects)
+```
+
+### view dataset
+
+```{r}
+zikaIgG_all = read_csv("data/ZIKV_peptides_IgG_peptide_frequency.csv") |> 
+  janitor::clean_names()
+
+view(head(zikaIgG_all, 10))
+```
+
+
+
+

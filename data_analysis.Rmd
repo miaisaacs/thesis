@@ -482,36 +482,141 @@ ggplot(normalized_hit_counts_protein, aes(x = timepoint, y = protein, fill = nor
 ```
 
 
-## making plots foor reactivity across genome for each serotype and timepoint
+## making plots for reactivity across genome for each serotype and timepoint
 
-### set midpoint for easier plotting
+### create table for protein positions
 ```{r}
-figure3_df <- final_df_long |> 
-  mutate(midpoint = (start + end) / 2) |> 
-  filter(hit_yn == 1)
+protein_positions <- tibble(
+  protein = c("C", "prM", "E", "NS1", "NS2A", "NS2B", "NS3", "NS4A", "NS4B", "NS5"),
+  start = c(1, 115, 281, 776, 1128, 1346, 1476, 2095, 2245, 2494),
+  end = c(114, 280, 775, 1127, 1345, 1475, 2094, 2244, 2493, 3392)
+)
+```
 
-ggplot(figure3_df, aes(x = midpoint, y = fluorescence_log)) +
-  geom_point(alpha = 0.7, size = 1.5, color = "blue") +
-  facet_grid(serotype ~ timepoint) +  
-  labs(
-    title = "Fluorescence (log-transformed) Across DENV1 Genome",
-    x = "Genome Position (Midpoint of Probe)",
-    y = "Fluorescence (log10 scale)"
-  ) +
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 8),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    panel.grid = element_blank()
+### filter for reactive probes only
+```{r}
+figure3_df <- final_df_long %>% 
+  mutate(midpoint = (start + end) / 2) %>% 
+  filter(hit_yn == 1) %>% 
+  mutate(
+    serotype_timepoint = paste(serotype, timepoint, sep = "_")
   )
 ```
 
+# NEEDS MAJOR HELP, IN PROGRESS
+### create plot
+```{r}
+ggplot(figure3_df, aes(x = midpoint, y = serotype_timepoint, color = serotype)) +
+  geom_point(aes(size = fluorescence_log), alpha = 0.7) +
 
+  # protein background regions
+  geom_rect(data = protein_positions,
+            aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+            fill = "gray90", inherit.aes = FALSE, alpha = 0.2) +
 
+  # protein names
+  geom_text(data = protein_positions,
+            aes(x = (start + end) / 2, y = 0, label = protein),
+            inherit.aes = FALSE, size = 3, vjust = -4) +
 
+  scale_color_manual(values = c(
+    "d1" = "red",
+    "d2" = "blue",
+    "d3" = "green",
+    "d4" = "purple",
+    "d3d4" = "orange",
+    "z" = "pink",
+    "zd" = "turquoise",
+    "zyfv" = "gold",
+    "zdyfv" = "gray"
+  )) +
 
+  theme_bw() +
+  theme(
+    strip.text.y = element_text(angle = 0),
+    panel.spacing = unit(1, "lines"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.y = element_blank(),
+    legend.position = "bottom"
+  ) +
 
+  labs(
+    x = "Genome Position (Midpoint AA)",
+    y = NULL,
+    color = "Serotype",
+    size = "Log Fluorescence Intensity"
+  )
+```
 
+```{r}
+# Subset DENV1-4 and NC
+figure3_denv_df <- figure3_df %>%
+  filter(serotype %in% c("d1", "d2", "d3", "d4", "nc"))
+```
+
+```{r}
+# Define custom color palette
+serotype_colors <- c(
+  "d1" = "#D7191C",
+  "d2" = "#2C7BB6",
+  "d3" = "#31A354",
+  "d4" = "#756BB1",
+  "nc" = "black"
+)
+
+# Create the plot
+p1 <- ggplot(figure3_denv_df, aes(x = midpoint, y = fluorescence_log, color = serotype)) +
+  
+  # Protein background regions
+  geom_rect(data = protein_positions,
+            aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+            fill = "gray90", inherit.aes = FALSE, alpha = 0.4) +
+  
+  # Points: Fluorescence vs genome position
+  geom_point(size = 0.8, alpha = 0.7) +
+  
+  # Protein names
+  geom_text(data = protein_positions,
+            aes(x = (start + end) / 2, y = max(figure3_denv_df$fluorescence_log, na.rm = TRUE) + 0.3, label = protein),
+            inherit.aes = FALSE, size = 3, vjust = 0) +
+  
+  scale_color_manual(values = serotype_colors) +
+  
+  theme_bw(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 10),
+    panel.spacing = unit(1, "lines"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 12),
+    axis.title.x = element_text(size = 12),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8)
+  ) +
+  
+  labs(
+    x = "Genome Position (Midpoint AA)",
+    y = "Log Fluorescence Intensity",
+    color = "Serotype",
+    title = "DENV1-4 and NC"
+  ) +
+  
+  # Facet by serotype and timepoint
+  facet_grid(serotype ~ timepoint, scales = "free_x", space = "free_x")
+
+p1
+```
+
+```{r}
+# Subset other serotypes
+figure3_other_df <- figure3_df %>%
+  filter(!serotype %in% c("d1", "d2", "d3", "d4", "nc"))
+```
+
+# RETURN TO LATER, NEED BREAK
 
 
 
