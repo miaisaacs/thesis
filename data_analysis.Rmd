@@ -31,7 +31,7 @@ library(ggeffects)
 dengueIgG_all = read_csv("data/Dengue_data_analysis_IgG.csv") |> 
   janitor::clean_names()
 
-view(head(dengueIgG_all, 100))
+view(head(dengueIgG_all, 10))
 ```
 
 ### remove unncessary variables
@@ -290,32 +290,51 @@ sample_1_data <- processed_data |>
 plot_threshold_distribution(sample_1_data)
 ```
 
-### capture start and end positions
-```{r}
-processed_data <- processed_data |> 
-  mutate(
-    location = str_extract(annotation, "(?<=location=)\\d+\\.\\.\\d+"),
-    start_pos = as.integer(str_extract(location, "^\\d+")),
-    end_pos = as.integer(str_extract(location, "\\d+$"))
-  )
-```
-
 ### view processed dataset
 ```{r}
 view(head(processed_data, 100))
-view(tail(processed_data, 100))
 ```
 
 ### import data from geneious prime
 ```{r}
-denv1_protein_regions <- read.csv("data/probe_sequences2.csv")
+denv1_protein_regions <- read.csv("data/probe_annotations.csv") |> 
+  janitor::clean_names()
 
-denv1_protein_regions <- denv1_protein_regions |> 
-  mutate(Name = ifelse(!is.na(product) & str_trim(product) != "", product, Name)) |> 
-  select(Name, Minimum, Maximum)
+probe_annotations <- denv1_protein_regions |> 
+  mutate(document_name = as.character(document_name)) |>
+  filter(
+    !grepl("source dengue virus", name, ignore.case = TRUE),
+    !grepl("Search Hit", name, ignore.case = TRUE),
+    !grepl("POLY CDS", name, ignore.case = TRUE),
+    !grepl("polyprotein", name, ignore.case = TRUE)
+  ) |> 
+  group_by(document_name) |> 
+  distinct(document_name, .keep_all = TRUE) |> 
+  ungroup() |> 
+  mutate(
+    protein = str_extract(name, "NS\\d+[A-Z]?|[CEP][^ ]*|prM"),
+    sequence = str_replace_all(sequence, "\\.\\.\\.", "")
+  ) |> 
+  select(
+    probe = document_name,
+    sequence,
+    start = min_original_sequence,
+    end = max_original_sequence,
+    protein
+  )
 
-view(denv1_protein_regions)
+view(head(probe_annotations, 10))
 ```
+
+### merge geneious data with processed data
+```{r}
+final_df_long <- probe_annotations |> 
+  left_join(processed_data, by = c("sequence" = "probe_sequence"), relationship = "many-to-many") |> 
+  select(-annotation, -sample)
+
+view(head(final_df_long,100))
+```
+
 
 ## normalize data and create heatmaps
 
