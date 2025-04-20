@@ -42,7 +42,7 @@ dengueIgG_clean <- dengueIgG_all |>
          -d2_conv, -d3_acute, -d3_conv, -d3d4_acute, -d3d4_conv, -d4_acute, -d4_conv,z_conv, -zd_conv, -zdyfv_conv,
          -zyfv_conv, -row_total_y, -z_conv)
 
-head(dengueIgG_clean)
+view(head(dengueIgG_clean, 10))
 ```
 
 ### check for missing values (all good!)
@@ -50,25 +50,78 @@ head(dengueIgG_clean)
 sum(is.na(dengueIgG_clean))
 ```
 
-### convert to long format for easier manipulation
-```{r}
-dengueIgG_long <- dengueIgG_clean |> 
-  pivot_longer(cols = matches("uwa_"),
-               names_to = "sample",
-               values_to = "fluorescence")
+## complete quantile normalization
 
-head(dengueIgG_long)
+### create matrix of fluorescence values and apply function
+```{r}
+fluorescence_matrix <- dengueIgG_clean |> 
+  select(-annotation, -probe_sequence) |> 
+  as.matrix()
+
+fluorescence_norm_matrix <- normalize.quantiles(fluorescence_matrix)
 ```
+
+### put normalized values back with original
+```{r}
+dengueIgG_wide_norm <- bind_cols(
+  dengueIgG_clean |> select(annotation, probe_sequence),
+  as.data.frame(fluorescence_norm_matrix)
+)
+
+colnames(dengueIgG_wide_norm) <- c(
+  colnames(dengueIgG_clean)[1:2],  # annotation, probe_sequence
+  colnames(dengueIgG_clean)[-c(1,2)]  # all sample names
+)
+
+view(head(dengueIgG_wide_norm, 10))
+```
+
+### create dfs to verify normalization worked
+```{r}
+# before normalization
+dengueIgG_long_raw <- dengueIgG_clean |> 
+  pivot_longer(
+    cols = -c(annotation, probe_sequence),
+    names_to = "sample",
+    values_to = "fluorescence"
+  )
+
+# after normalization
+dengueIgG_long_norm <- dengueIgG_wide_norm |> 
+  pivot_longer(
+    cols = -c(annotation, probe_sequence),
+    names_to = "sample",
+    values_to = "fluorescence_norm"
+  )
+```
+
+### create box plots to visualize
+```{r}
+box_raw <- ggplot(dengueIgG_long_raw, aes(x = sample, y = fluorescence)) +
+  geom_boxplot(outlier.size = 0.5) +
+  theme_minimal() +
+  labs(title = "Before Quantile Normalization", x = "", y = "Fluorescence") +
+  theme(axis.text.x = element_blank())
+
+box_norm <- ggplot(dengueIgG_long_norm, aes(x = sample, y = fluorescence_norm)) +
+  geom_boxplot(outlier.size = 0.5) +
+  theme_minimal() +
+  labs(title = "After Quantile Normalization", x = "", y = "Fluorescence (Normalized)") +
+  theme(axis.text.x = element_blank())
+
+box_raw + box_norm
+```
+
+boxplots show that normalization has been done correctly
+
 
 ### add log transformed fluorescence values for future analysis
 ```{r}
-dengueIgG_transform <- dengueIgG_long |> 
-  mutate(fluorescence_log = log(fluorescence))
+dengueIgG_transform <- dengueIgG_long_norm |> 
+  mutate(fluorescence_log = log(fluorescence_norm))
 
 head(dengueIgG_transform)
 ```
-
-## prepare data for quantile normalization
 
 ### extract serotype from sample name
 ```{r}
@@ -77,70 +130,6 @@ dengueIgG_serotype <- dengueIgG_transform |>
            str_replace_all("_", "")) |> 
   arrange(sample)
 ```
-
-### visualize distributions of fluorescence values across serotypes
-```{r}
-ggplot(dengueIgG_serotype, aes(x = serotype, y = fluorescence)) +
-  geom_boxplot() +
-  ggtitle("Original Fluorescence Distributions by Serotype")
-```
-
-fluorescence values appear to be similarly distributed across all serotypes, except for the negative control. despite the similarities, i will complete quantile normalization to be sure that my data is properly aligned.
-
-### normalize across all serotypes
-```{r}
-# extract fluorescence values as a matrix
-fluorescence_matrix <- as.matrix(dengueIgG_serotype |> select(fluorescence))
-
-# perform quantile normalization across ALL samples together
-fluorescence_norm <- normalize.quantiles(fluorescence_matrix)
-
-# add normalized values back to the full dataset
-dengueIgG_serotype$fluorescence_norm <- as.vector(fluorescence_norm)
-
-head(dengueIgG_serotype)
-```
-
-### summarize fluorescence values to normalized values to observe any differences
-```{r}
-original_summary <- dengueIgG_serotype |> 
-  summarize(
-    min = min(fluorescence, na.rm = TRUE),
-    q1 = quantile(fluorescence, 0.25, na.rm = TRUE),
-    median = median(fluorescence, na.rm = TRUE),
-    mean = mean(fluorescence, na.rm = TRUE),
-    q3 = quantile(fluorescence, 0.75, na.rm = TRUE),
-    max = max(fluorescence, na.rm = TRUE),
-    sd = sd(fluorescence, na.rm = TRUE)
-  )
-
-normalized_summary <- dengueIgG_serotype |> 
-  summarize(
-    min = min(fluorescence_norm, na.rm = TRUE),
-    q1 = quantile(fluorescence_norm, 0.25, na.rm = TRUE),
-    median = median(fluorescence_norm, na.rm = TRUE),
-    mean = mean(fluorescence_norm, na.rm = TRUE),
-    q3 = quantile(fluorescence_norm, 0.75, na.rm = TRUE),
-    max = max(fluorescence_norm, na.rm = TRUE),
-    sd = sd(fluorescence_norm, na.rm = TRUE)
-  )
-
-print(original_summary)
-print(normalized_summary)
-```
-
-### visualize fluorescence vs. normalized values in density plots
-```{r}
-ggplot(sample_n(dengueIgG_serotype, 5000), aes(x = fluorescence)) +
-  geom_density() +
-  ggtitle("Fluorescence Density (Original)")
-
-ggplot(sample_n(dengueIgG_serotype, 5000), aes(x = fluorescence_norm)) +
-  geom_density() +
-  ggtitle("Fluorescence Density (Normalized)")
-```
-
-according to the summary statistics and density plots, the normalized fluorescence values are identical to the original fluorescence values. therefore, quantile normalization was not necessary for this dataset but will be maintained until completion of the analysis. (may not be included in report)
 
 ### extract necessary details from annotations
 ```{r}
@@ -154,6 +143,7 @@ dengueIgG_serotype <- dengueIgG_serotype |>
 head(dengueIgG_serotype)
 tail(dengueIgG_serotype)
 ```
+
 
 ## separation into serotype-specific and acute vs. conv data frames
 ```{r, d1 acute}
