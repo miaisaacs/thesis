@@ -23,6 +23,8 @@ library(forcats)
 library(scales)
 library(viridis)
 library(ggeffects)
+library(knitr)
+library(kableExtra)
 ```
 
 ### view dataset
@@ -1122,70 +1124,198 @@ p10
 ```
 
 
-## linear mixed effects model
+## linear mixed effects models
 
 ### fit basic model
 ```{r}
-# make sure timepoint is ordered/numeric
-processed_data$timepoint <- as.numeric(as.character(processed_data$timepoint))
+# filter out negative control
+basic_model_df <- final_df_long |> 
+  mutate(timepoint = as.numeric(as.character(timepoint))) |> 
+  filter(serotype != "nc")
 
-# fit mixed effects model
+# fit model
 basic_model <- lmer(
   fluorescence_norm ~ timepoint + (1 | patient_id), 
-  data = processed_data
+  data = basic_model_df
 )
 
 summary(basic_model)
 ```
 
+### plot residuals vs. fitted values
+```{r}
+fitted_vals <- fitted(basic_model)
+residuals_vals <- resid(basic_model)
+
+plot(fitted_vals, residuals_vals,
+     xlab = "Fitted Values", 
+     ylab = "Residuals",
+     main = "Residuals vs Fitted",
+     pch = 20,     
+     col = "blue") 
+abline(h = 0, lty = 2, col = "red")  
+```
+
+residuals vs. fitted values appear fanned out with a slight arch shape. will run the model using log transformed values and reassess residuals vs. fitted for homoscedasticity.
+
 ### fit basic model in log scale (?)
 ```{r}
+# fit model with log transformed values
 basic_log_model <- lmer(
   fluorescence_log ~ timepoint + (1 | patient_id), 
-  data = processed_data
+  data = basic_model_df
 )
 
 summary(basic_log_model)
 ```
 
+### plot residuals vs. fitted values
+```{r}
+fitted_vals2 <- fitted(basic_log_model)
+residuals_vals2 <- resid(basic_log_model)
+
+plot(fitted_vals2, residuals_vals2,
+     xlab = "Fitted Values", 
+     ylab = "Residuals",
+     main = "Residuals vs Fitted",
+     pch = 20,     
+     col = "blue") 
+abline(h = 0, lty = 2, col = "red") 
+```
+
+residuals vs. fitted values appear much more evenly distributed and homoscedastic. i will continue forward with the model using log transformed values. next, the interaction between serotype and timepoint will be assessed as a necessary consideration in this analysis.
+
 ### fit model with interaction by serotype
 ```{r}
-serotype_model <- lmer(
-  fluorescence_norm ~ timepoint * serotype + (1 | patient_id), 
-  data = processed_data
-)
-
-summary(serotype_model)
-```
-
-### fit model with interaction in log scale 
-```{r}
-serotype_model_log <- lmer(
+interaction_log_model <- lmer(
   fluorescence_log ~ timepoint * serotype + (1 | patient_id), 
-  data = processed_data
+  data = basic_model_df
 )
 
-summary(serotype_model_log)
+summary(interaction_log_model)
 ```
 
-### plot responses by serotype across timepoints
+### visualize changes across timepoints per serotype
 ```{r}
-# get predicted log fluorescence values over time for each serotype
-preds <- ggpredict(serotype_model_log, terms = c("timepoint", "serotype"))
+plot_df <- basic_model_df |> 
+  group_by(serotype, timepoint) |> 
+  summarize(
+    mean_fluorescence = mean(fluorescence_log, na.rm = TRUE),
+    .groups = 'drop'
+  )
 
-ggplot(preds, aes(x = x, y = predicted, color = group, fill = group)) +
-  geom_line(linewidth = 1) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2, color = NA) +
+ggplot(plot_df, aes(x = timepoint, y = mean_fluorescence, color = serotype)) +
+  geom_line(size = 1) +
+  geom_point(size = 1.5) +
+  theme_minimal() +
   labs(
-    title = "Predicted Antibody Dynamics Over Time by Serotype",
-    x = "Timepoint",
-    y = "Log Fluorescence",
-    color = "Serotype",
-    fill = "Serotype"
-  ) +
-  theme_minimal(base_size = 14)
+    title = "Mean Log Fluorescence over Time by Serotype",
+    y = "Mean Log Fluorescence",
+    x = "Timepoint"
+  )
 ```
 
+### filter to get only reactive peptides in DENV1-DENV4
+```{r}
+denv_serotypes <- c("d1", "d2", "d3", "d3d4", "d4")
+non_denv_serotypes <- c("z", "zd", "zyfv", "zdyfv")
+
+# summarize per probe
+probe_hits <- basic_model_df |> 
+  group_by(probe, sequence) |> 
+  summarize(
+    denv_hits = all(denv_serotypes %in% serotype[hit_yn == 1]),
+    non_denv_hits = any(serotype %in% non_denv_serotypes & hit_yn == 1),
+    .groups = "drop"
+  )
+
+# filter probes that meet criteria
+final_probes <- probe_hits |> 
+  filter(denv_hits == TRUE, non_denv_hits == FALSE)
+
+# full data for the probes
+final_probes_df <- basic_model_df |> 
+  filter(probe %in% final_probes$probe)
+
+view(final_probes)
+```
+
+### limit to probes in E, prM, and NS1 for consistency with literature
+```{r}
+target_proteins <- c("E", "prM", "NS1")
+
+final_probes_filtered <- final_probes_df |>
+  filter(protein %in% target_proteins) |>
+  distinct(sequence, .keep_all = TRUE)
+
+view(final_probes_filtered)
+```
+
+### create table to display probe sequences
+```{r}
+target_protein_order <- c("E", "prM", "NS1")
+
+final_probes_filtered |> 
+  select(sequence, protein) |> 
+  distinct() |> 
+  mutate(protein = factor(protein, levels = target_protein_order)) |> 
+  arrange(protein) |> 
+  kable(
+    caption = "Selected DENV-Specific Probe Sequences from Vaccine-Relevant Proteins",
+    col.names = c("Probe Sequence", "Protein"),
+    align = "c"
+  ) |> 
+  kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover"))
+```
+
+### summarize probe data
+```{r}
+probe_summary <- final_probes_df |> 
+  filter(probe %in% final_probes_filtered$probe) |> 
+  group_by(probe, sequence, protein) |> 
+  summarize(
+    mean_fluorescence = mean(fluorescence_norm, na.rm = TRUE),
+    sd_fluorescence = sd(fluorescence_norm, na.rm = TRUE),
+    .groups = "drop"
+  ) |> 
+  mutate(protein = factor(protein, levels = target_protein_order)) |> 
+  arrange(desc(mean_fluorescence)) |> 
+  select(sequence, protein, mean_fluorescence, sd_fluorescence)
+
+probe_summary |> 
+  kable(
+    caption = "Summary of Selected Probe Reactivities Across Samples",
+    col.names = c("Probe Sequence", "Protein", "Mean Fluorescence", "SD Fluorescence"),
+    align = "c"
+  ) |> 
+  kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover"))
+```
+
+### visualize reactivity for each probe across timepoints
+```{r}
+ggplot(
+  final_probes_df |> 
+    filter(probe %in% final_probes_filtered$probe) |> 
+    mutate(probe_sequence = paste0(probe, ": ", sequence)),
+  aes(x = timepoint, y = fluorescence_norm, color = probe_sequence)
+) +
+  geom_point(alpha = 0.5, size = 1) +
+  geom_smooth(se = FALSE, method = "loess") +
+  facet_wrap(~ probe_sequence, scales = "free_y") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",      
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Fluorescence Over Time by Probe",
+    y = "Normalized Fluorescence",
+    x = "Timepoint",
+    color = "Probe"
+  )
+```
 
 
 ### calculate intensity and breadth
