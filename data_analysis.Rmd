@@ -1317,6 +1317,55 @@ ggplot(
   )
 ```
 
+## one way ANOVA to assess significance
+
+### filter and prepare data 
+```{r}
+sequences_to_keep <- c(
+  "SVALAPHVGLGL",
+  "SNELNHILLEND",
+  "KAKIIGADVQNT",
+  "NTTTDSRCPTQG",
+  "EMIIPKIYGGPI",
+  "KYSWKSWGKAKI",
+  "RKLCIEAKISNT"
+)
+
+ANOVA_df <- final_df_long |> 
+  filter(sequence %in% sequences_to_keep)
+
+ANOVA_df$timepoint <- as.factor(ANOVA_df$timepoint)
+
+split_data <- split(ANOVA_df, ANOVA_df$sequence)
+```
+
+### run the ANOVA
+```{r}
+ANOVA_results <- lapply(split_data, function(df) {
+  aov(fluorescence_norm ~ as.factor(timepoint), data = df)
+})
+
+ANOVA_summary <- lapply(names(ANOVA_results), function(seq_name) {
+  summary_res <- summary(ANOVA_results[[seq_name]])
+  
+  f_value <- summary_res[[1]][["F value"]][1]
+  p_value <- summary_res[[1]][["Pr(>F)"]][1]
+  
+  p_value_formatted <- format(round(p_value, 4), nsmall = 4, scientific = FALSE)
+  
+  data.frame(
+    sequence = seq_name,
+    F_value = round(f_value, 3),
+    p_value = p_value_formatted
+  )
+}) |> 
+  bind_rows()
+
+view(ANOVA_summary)
+```
+
+
+
 ## exploratory analysis, unlikely to include
 ### calculate intensity and breadth
 ```{r}
