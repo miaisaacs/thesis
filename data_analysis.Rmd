@@ -1378,57 +1378,49 @@ print(results)
 
 ### formatting results into a table
 ```{r}
-results <- data.frame(
-  sequence = c("SVALAPHVGLGL", "SNELNHILLEND", "KAKIIGADVQNT", "NTTTDSRCPTQG",
-               "EMIIPKIYGGPI", "KYSWKSWGKAKI", "RKLCIEAKISNT"),
-  sensitivity = c(0.5588235, 0.6279070, 0.3571429, 0.4500000, 0.6666667, 0.5921053, 0.4583333),
-  specificity = rep(1, 7),
-  accuracy = c(0.9504950, 0.9471947, 0.9108911, 0.9636964, 0.9537954, 0.8976898, 0.9141914),
-  auc = rep(1, 7),
-  ppv = rep(1, 7),
-  npv = c(0.9471831, 0.9420290, 0.9062500, 0.9625850, 0.9490909, 0.8798450, 0.9074733)
-)
+roc_list <- lapply(sequences_to_keep, function(seq) {
+  data_subset <- subset(significance_df, sequence == seq)
+  roc_obj <- roc(response = data_subset$hit_yn, predictor = data_subset$fluorescence_norm)
+  
+  roc_df <- data.frame(
+    specificity = rev(roc_obj$specificities),
+    sensitivity = rev(roc_obj$sensitivities),
+    sequence = seq,
+    auc = as.numeric(auc(roc_obj)) 
+  )
+  
+  return(roc_df)
+})
 
-results |> 
-  kable(caption = "Diagnostic Performance of Candidate DENV Peptides", digits = 3) |> 
-  kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover", "condensed"))
-```
+roc_df_all <- bind_rows(roc_list)
 
-### plot ROC curves for peptides with highest sensitivity
-```{r}
-emi_data <- subset(significance_df, sequence == "EMIIPKIYGGPI")
-snel_data <- subset(significance_df, sequence == "SNELNHILLEND")
+auc_labels <- roc_df_all |> 
+  group_by(sequence) |> 
+  summarise(auc = first(auc))
 
-roc_emi <- roc(response = emi_data$hit_yn, predictor = emi_data$fluorescence_norm)
-roc_snel <- roc(response = snel_data$hit_yn, predictor = snel_data$fluorescence_norm)
-
-emi_df <- data.frame(
-  specificity = rev(roc_emi$specificities),
-  sensitivity = rev(roc_emi$sensitivities)
-)
-
-snel_df <- data.frame(
-  specificity = rev(roc_snel$specificities),
-  sensitivity = rev(roc_snel$sensitivities)
-)
-
-emi_plot <- ggplot(emi_df, aes(x = 1 - specificity, y = sensitivity)) +
-  geom_line(color = "#377eb8", size = 1.2) +
+ggplot(roc_df_all, aes(x = 1 - specificity, y = sensitivity, color = sequence)) +
+  geom_line(linewidth = 1.2) +
   geom_abline(linetype = "dashed", color = "gray") +
-  ggtitle("ROC Curve: EMIIPKIYGGPI") +
+  facet_wrap(~ sequence, ncol = 3) +
   theme_minimal() +
-  labs(x = "1 - Specificity", y = "Sensitivity") +
-  annotate("text", x = 0.6, y = 0.2, label = paste0("AUC = ", round(auc(roc_emi), 3))) +
-  theme(plot.title = element_text(hjust = 0.5))
-
-snel_plot <- ggplot(snel_df, aes(x = 1 - specificity, y = sensitivity)) +
-  geom_line(color = "#e41a1c", size = 1.2) +
-  geom_abline(linetype = "dashed", color = "gray") +
-  ggtitle("ROC Curve: SNELNHILLEND") +
-  theme_minimal() +
-  labs(x = "1 - Specificity", y = "Sensitivity") +
-  annotate("text", x = 0.6, y = 0.2, label = paste0("AUC = ", round(auc(roc_snel), 3))) +
-  theme(plot.title = element_text(hjust = 0.5))
+  labs(
+    title = "ROC Curves for All Peptides",
+    x = "1 - Specificity",
+    y = "Sensitivity",
+    color = "Peptide"
+  ) +
+  geom_text(
+    data = auc_labels,
+    aes(x = 0.6, y = 0.2, label = paste0("AUC = ", round(auc, 3))),
+    inherit.aes = FALSE,
+    size = 3.5
+  ) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none"
+  ) +
+  scale_color_brewer(palette = "Dark2")
 ```
 
 ### run Kolmogorov-Smirnov test for normality
