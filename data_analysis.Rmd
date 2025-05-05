@@ -28,6 +28,7 @@ library(kableExtra)
 library(dunn.test)
 library(gridExtra)
 library(caret)
+library(forcats)
 ```
 
 ### view dataset
@@ -134,19 +135,27 @@ dengueIgG_serotype <- dengueIgG_transform |>
   mutate(serotype = str_extract(sample, "_(d[1-4]d[1-4]|d[1-4]|z|zd|zdyfv|zyfv|nc)_") |>  
            str_replace_all("_", "")) |> 
   arrange(sample)
+
+view(head(dengueIgG_serotype))
 ```
 
 ### extract necessary details from annotations
 ```{r}
 dengueIgG_serotype <- dengueIgG_serotype |> 
   mutate(
-    sample_id = str_extract(sample, "(?<=_)[0-9]+(_[0-9]+)?"), 
-    patient_id = str_extract(sample_id, "^[0-9]+"),
-    timepoint = if_else(str_detect(sample_id, "_"), str_extract(sample_id, "(?<=_)[0-9]+"), NA_character_)
-  )
+    sample_parts = str_split(sample, "_"),
+    timepoint = case_when(
+      str_detect(sample, regex("acute", ignore_case = TRUE)) ~ "acute",
+      TRUE ~ map_chr(sample_parts, ~ .x[3]) 
+    ),
+    patient_id = map_chr(sample_parts, ~ .x[2]) 
+  ) |> 
+  select(-sample_parts) 
 
-head(dengueIgG_serotype)
-tail(dengueIgG_serotype)
+dengueIgG_serotype |> count(timepoint)
+
+view(head(dengueIgG_serotype, 100))
+view(tail(dengueIgG_serotype, 100))
 ```
 
 
@@ -386,7 +395,10 @@ normalized_hit_counts$serotype <- fct_rev(factor(normalized_hit_counts$serotype,
 
 ### create heatmap by serotype
 ```{r}
-ggplot(normalized_hit_counts, aes(x = timepoint, y = serotype, fill = normalized_count)) +
+normalized_hit_counts |> 
+  filter(timepoint != "nc", serotype != "nc") |>
+  mutate(timepoint = factor(timepoint, levels = c("acute", sort(unique(timepoint[timepoint != "acute"]))))) |> 
+  ggplot(aes(x = timepoint, y = serotype, fill = normalized_count)) +
   geom_tile() +
   scale_fill_gradientn(
     colours = rev(heat.colors(100)), 
@@ -440,7 +452,6 @@ normalized_hit_counts_protein <- reactive_peptide_counts_protein |>
   filter(!is.na(timepoint))  # remove any missing timepoints just in case
 
 print(head(normalized_hit_counts_protein))
-
 ```
 
 ### set order of proteins by genome
@@ -456,7 +467,10 @@ normalized_hit_counts_protein$protein <- factor(
 
 ### plot heatmap of protein by timepoint
 ```{r}
-ggplot(normalized_hit_counts_protein, aes(x = timepoint, y = protein, fill = normalized_count)) +
+normalized_hit_counts_protein |> 
+  filter(timepoint != "nc") |> 
+  mutate(timepoint = factor(timepoint, levels = c("acute", sort(unique(timepoint[timepoint != "acute"]))))) |> 
+  ggplot(aes(x = timepoint, y = protein, fill = normalized_count)) +
   geom_tile(color = "white") +
   scale_fill_gradientn(
     colours = rev(heat.colors(100)),
@@ -526,8 +540,8 @@ figure3_df <- final_df_long |>
 ### create plot for denv1 all timepoints
 ```{r}
 figure3_d1_df <- figure3_df |> 
-  filter(serotype == "d1", timepoint %in% 1:5) |>
-  mutate(timepoint = paste0("T", timepoint))
+  filter(serotype == "d1", timepoint %in% c(1:5, "acute")) |>
+  mutate(timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)))
 
 p <- ggplot(figure3_d1_df, aes(x = midpoint, y = fluorescence_norm)) +
 
@@ -567,7 +581,7 @@ p <- ggplot(figure3_d1_df, aes(x = midpoint, y = fluorescence_norm)) +
     title = "DENV1 Reactivity Across Genome"
   ) +
   
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 12) +
   theme(
     strip.text = element_text(size = 14, face = "bold"),
     axis.title.x.bottom = element_text(margin = margin(t = 10)),
@@ -586,8 +600,8 @@ p
 ### repeat for DENV2
 ```{r}
 figure3_d2_df <- figure3_df |> 
-  filter(serotype == "d2", timepoint %in% 1:5) |>
-  mutate(timepoint = paste0("T", timepoint))
+  filter(serotype == "d2", timepoint %in% c(1:5, "acute")) |> 
+  mutate(timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint))) 
 
 p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
 
@@ -627,7 +641,7 @@ p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
     title = "DENV2 Reactivity Across Genome"
   ) +
   
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 12) +
   theme(
     strip.text = element_text(size = 14, face = "bold"),
     axis.title.x.bottom = element_text(margin = margin(t = 10)),
@@ -646,8 +660,8 @@ p2
 ### repeat for denv3
 ```{r}
 figure3_d3_df <- figure3_df |> 
-  filter(serotype == "d3", timepoint %in% 1:5) |>
-  mutate(timepoint = paste0("T", timepoint))
+  filter(serotype == "d3", timepoint %in% c(1:5, "acute")) |> 
+  mutate(timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)))
 
 p3 <- ggplot(figure3_d3_df, aes(x = midpoint, y = fluorescence_norm)) +
 
@@ -687,7 +701,7 @@ p3 <- ggplot(figure3_d3_df, aes(x = midpoint, y = fluorescence_norm)) +
     title = "DENV3 Reactivity Across Genome"
   ) +
   
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 12) +
   theme(
     strip.text = element_text(size = 14, face = "bold"),
     axis.title.x.bottom = element_text(margin = margin(t = 10)),
@@ -706,8 +720,8 @@ p3
 ### repeat for DENV4
 ```{r}
 figure3_d4_df <- figure3_df |> 
-  filter(serotype == "d4", timepoint %in% 1:5) |>
-  mutate(timepoint = paste0("T", timepoint))
+  filter(serotype == "d4", timepoint %in% c(1:5, "acute")) |>
+  mutate(timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)))
 
 p4 <- ggplot(figure3_d4_df, aes(x = midpoint, y = fluorescence_norm)) +
 
@@ -747,7 +761,7 @@ p4 <- ggplot(figure3_d4_df, aes(x = midpoint, y = fluorescence_norm)) +
     title = "DENV4 Reactivity Across Genome"
   ) +
   
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 12) +
   theme(
     strip.text = element_text(size = 14, face = "bold"),
     axis.title.x.bottom = element_text(margin = margin(t = 10)),
@@ -766,8 +780,8 @@ p4
 ### repeat for DENV3/DENV4
 ```{r}
 figure3_d3d4_df <- figure3_df |> 
-  filter(serotype == "d3d4", timepoint %in% 1:5) |>
-  mutate(timepoint = paste0("T", timepoint))
+  filter(serotype == "d3d4", timepoint %in% c(1:5, "acute")) |> 
+  mutate(timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint))) 
 
 p5 <- ggplot(figure3_d3d4_df, aes(x = midpoint, y = fluorescence_norm, color = serotype)) +
 
@@ -808,7 +822,7 @@ p5 <- ggplot(figure3_d3d4_df, aes(x = midpoint, y = fluorescence_norm, color = s
     title = "DENV3/DENV4 Reactivity Across Genome"
   ) +
   
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 12) +
   theme(
     strip.text = element_text(size = 14, face = "bold"),
     axis.title.x.bottom = element_text(margin = margin(t = 10)),
@@ -1128,6 +1142,11 @@ p10
 
 
 ## linear mixed effects models
+
+### relevel so acute is reference
+```{r}
+final_df_long$timepoint <- fct_relevel(final_df_long$timepoint, "acute")
+```
 
 ### fit basic model
 ```{r}
