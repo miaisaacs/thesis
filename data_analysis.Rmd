@@ -396,22 +396,63 @@ normalized_hit_counts$serotype <- fct_rev(factor(normalized_hit_counts$serotype,
 ### create heatmap by serotype
 ```{r}
 normalized_hit_counts |> 
-  filter(timepoint != "nc", serotype != "nc") |>
-  mutate(timepoint = factor(timepoint, levels = c("acute", sort(unique(timepoint[timepoint != "acute"]))))) |> 
+  filter(
+    timepoint != "nc", 
+    timepoint != "5",
+    serotype %in% c("d1", "d2", "d3", "d4")
+  ) |> 
+  mutate(
+    serotype = case_when(
+      serotype == "d1" ~ "D1",
+      serotype == "d2" ~ "D2",
+      serotype == "d3" ~ "D3",
+      serotype == "d4" ~ "D4"
+    ),
+    serotype = factor(serotype, levels = c("D4", "D3", "D2", "D1")),
+    timepoint = factor(timepoint, levels = c("acute", sort(unique(timepoint[timepoint != "acute"])))),
+    label = paste0("", reactive_peptides) 
+  ) |> 
   ggplot(aes(x = timepoint, y = serotype, fill = normalized_count)) +
   geom_tile() +
+  geom_text(aes(label = label), color = "black", size = 3) +  
   scale_fill_gradientn(
-    colours = rev(heat.colors(100)), 
+    colors = rev(RColorBrewer::brewer.pal(11, "Spectral")), 
     labels = function(x) paste0(round(x, 1), "%")
   ) +
   labs(
-    title = "Heatmap of Normalized Peptide Counts",
+    title = "Reactive Peptides Per Serotype and Timepoint",
     x = "Timepoint",
     y = "Serotype",
-    fill = "Normalized Count (%)"
+    fill = "Percentage of Reactive 
+    Peptides (n=6634)"
   ) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### make boxplot to show distribution of each serotype/timepoint
+```{r}
+ggplot(final_df_long |> 
+         filter(hit_yn == 1, timepoint != 5, 
+                serotype %in% c("d1", "d2", "d3", "d4")) |>
+         mutate(serotype = toupper(serotype)),
+       aes(x = factor(timepoint), y = fluorescence_log, fill = serotype)) +
+  geom_boxplot(outlier.shape = 16, outlier.size = 0.5, alpha = 0.7) +
+  facet_wrap(~ serotype) +
+  labs(
+    title = "Immunoreactivity by Serotype and Timepoint",
+    x = "Timepoint",
+    y = "Signal Intensity (log(AU))",
+    fill = "Serotype"
+  ) +
+  coord_cartesian(ylim = c(6.5, 11.5)) +
+  scale_fill_brewer(palette = "Spectral") + 
+  theme_minimal() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
 ```
 
 ## make heatmap by protein
@@ -490,6 +531,32 @@ normalized_hit_counts_protein |>
   )
 ```
 
+### make boxplot to show distribution of each protein/timepoint
+```{r}
+ggplot(final_df_long |> 
+         filter(hit_yn == 1, timepoint != 5, 
+                serotype %in% c("d1", "d2", "d3", "d4")) |>
+         mutate(serotype = toupper(serotype),
+                protein = factor(protein, levels = genome_protein_order)
+  ),
+       aes(x = factor(timepoint), y = fluorescence_log, fill = protein)) +
+  geom_boxplot(outlier.shape = 16, outlier.size = 0.5, alpha = 0.7) +
+  facet_wrap(~ protein) +
+  labs(
+    title = "Immunoreactivity by Protein and Timepoint",
+    x = "Timepoint",
+    y = "Signal Intensity (log(AU))",
+    fill = "Protein"
+  ) +
+  coord_cartesian(ylim = c(6.5, 11.5)) +
+  scale_fill_brewer(palette = "Spectral") + 
+  theme_minimal() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+```
 
 ## making plots for reactivity across genome for each serotype and timepoint
 
@@ -597,6 +664,77 @@ p <- ggplot(figure3_d1_df, aes(x = midpoint, y = fluorescence_norm)) +
 p
 ```
 
+### with edits for percentile bins
+```{r}
+figure3_d1_df <- figure3_df |> 
+  filter(serotype == "d1", timepoint %in% c(1:5, "acute")) |>
+  mutate(
+    timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)),
+    
+    percentile_bin = case_when(
+      fluorescence_norm <= quantile(fluorescence_norm, 0.75, na.rm = TRUE) ~ "0–75%",
+      fluorescence_norm <= quantile(fluorescence_norm, 0.9, na.rm = TRUE) ~ "75–90%",
+      TRUE ~ "90–100%"
+    )
+  )
+
+p <- ggplot(figure3_d1_df, aes(x = midpoint, y = fluorescence_norm)) +
+
+  geom_rect(
+    data = protein_rects,
+    aes(xmin = start, xmax = end, ymin = ymin, ymax = ymax, fill = protein),
+    inherit.aes = FALSE,
+    alpha = 0.8
+  ) +
+
+  geom_point(aes(color = percentile_bin), size = 0.3, alpha = 1.0) +
+
+  geom_text(
+    data = protein_positions,
+    aes(
+      x = (start + end) / 2,
+      y = max(figure3_d1_df$fluorescence_norm, na.rm = TRUE) * 1.05,
+      label = protein
+    ),
+    inherit.aes = FALSE,
+    size = 2,
+    fontface = "bold",
+    vjust = -0.2
+  ) +
+
+  facet_wrap(~ timepoint, ncol = 1, scales = "free_y") +
+
+  scale_fill_brewer(palette = "Spectral", name = "Protein", guide = "none") +  
+
+  scale_color_manual(
+    values = c("0–75%" = "gray80", "75–90%" = "gray40", "90–100%" = "black"),
+    name = "Reactivity Percentile"
+  ) +
+
+  scale_x_continuous(breaks = seq(0, 3400, 500)) +
+
+  labs(
+    x = "Proteome Position",
+    y = "Signal Intensity (AU)",
+    title = "DENV1 Immunoreactivity Across Proteome"
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.title.x.bottom = element_text(margin = margin(t = 10)),
+    axis.text.x.bottom = element_text(size = 10),
+    axis.title.x.top = element_blank(),
+    axis.text.x.top = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+p
+```
+
 ### repeat for DENV2
 ```{r}
 figure3_d2_df <- figure3_df |> 
@@ -652,6 +790,77 @@ p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
     panel.grid.minor.x = element_blank(),
     legend.position = "none",
     plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+p2
+```
+
+### repeat with edits for denv2
+```{r}
+figure3_d2_df <- figure3_df |> 
+  filter(serotype == "d2", timepoint %in% c(1:5, "acute")) |> 
+  mutate(
+    timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)),
+    
+    percentile_bin = case_when(
+      fluorescence_norm <= quantile(fluorescence_norm, 0.75, na.rm = TRUE) ~ "0–75%",
+      fluorescence_norm <= quantile(fluorescence_norm, 0.9, na.rm = TRUE) ~ "75–90%",
+      TRUE ~ "90–100%"
+    )
+  )
+
+p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
+
+  geom_rect(
+    data = protein_rects,
+    aes(xmin = start, xmax = end, ymin = ymin, ymax = ymax, fill = protein),
+    inherit.aes = FALSE,
+    alpha = 0.8
+  ) +
+
+  geom_point(aes(color = percentile_bin), size = 0.3, alpha = 1.0) +
+
+  geom_text(
+    data = protein_positions,
+    aes(
+      x = (start + end) / 2,
+      y = max(figure3_d2_df$fluorescence_norm, na.rm = TRUE) * 1.05,
+      label = protein
+    ),
+    inherit.aes = FALSE,
+    size = 2,
+    fontface = "bold",
+    vjust = -0.2
+  ) +
+
+  facet_wrap(~ timepoint, ncol = 1, scales = "free_y") +
+
+  scale_fill_brewer(palette = "Spectral", name = "Protein", guide = "none") +
+
+  scale_color_manual(
+    values = c("0–75%" = "gray80", "75–90%" = "gray40", "90–100%" = "black"),
+    name = "Reactivity Percentile"
+  ) +
+
+  scale_x_continuous(breaks = seq(0, 3400, 500)) +
+
+  labs(
+    x = "Proteome Position",
+    y = "Signal Intensity (AU)",
+    title = "DENV2 Immunoreactivity Across Proteome"
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.title.x.bottom = element_text(margin = margin(t = 10)),
+    axis.text.x.bottom = element_text(size = 10),
+    axis.title.x.top = element_blank(),
+    axis.text.x.top = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 16)
   )
 
 p2
@@ -717,6 +926,77 @@ p3 <- ggplot(figure3_d3_df, aes(x = midpoint, y = fluorescence_norm)) +
 p3
 ```
 
+### repeat for DENV3 with edits
+```{r}
+figure3_d3_df <- figure3_df |> 
+  filter(serotype == "d3", timepoint %in% c(1:5, "acute")) |> 
+  mutate(
+    timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)),
+    
+    percentile_bin = case_when(
+      fluorescence_norm <= quantile(fluorescence_norm, 0.75, na.rm = TRUE) ~ "0–75%",
+      fluorescence_norm <= quantile(fluorescence_norm, 0.9, na.rm = TRUE) ~ "75–90%",
+      TRUE ~ "90–100%"
+    )
+  )
+
+p3 <- ggplot(figure3_d3_df, aes(x = midpoint, y = fluorescence_norm)) +
+
+  geom_rect(
+    data = protein_rects,
+    aes(xmin = start, xmax = end, ymin = ymin, ymax = ymax, fill = protein),
+    inherit.aes = FALSE,
+    alpha = 0.8
+  ) +
+
+  geom_point(aes(color = percentile_bin), size = 0.3, alpha = 1.0) +
+
+  geom_text(
+    data = protein_positions,
+    aes(
+      x = (start + end) / 2,
+      y = max(figure3_d3_df$fluorescence_norm, na.rm = TRUE) * 1.05,
+      label = protein
+    ),
+    inherit.aes = FALSE,
+    size = 2,
+    fontface = "bold",
+    vjust = -0.2
+  ) +
+
+  facet_wrap(~ timepoint, ncol = 1, scales = "free_y") +
+
+  scale_fill_brewer(palette = "Spectral", name = "Protein", guide = "none") +
+
+  scale_color_manual(
+    values = c("0–75%" = "gray80", "75–90%" = "gray40", "90–100%" = "black"),
+    name = "Reactivity Percentile"
+  ) +
+
+  scale_x_continuous(breaks = seq(0, 3400, 500)) +
+
+  labs(
+    x = "Proteome Position",
+    y = "Signal Intensity (AU)",
+    title = "DENV3 Immunoreactivity Across Proteome"
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.title.x.bottom = element_text(margin = margin(t = 10)),
+    axis.text.x.bottom = element_text(size = 10),
+    axis.title.x.top = element_blank(),
+    axis.text.x.top = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+p3
+```
+
 ### repeat for DENV4
 ```{r}
 figure3_d4_df <- figure3_df |> 
@@ -772,6 +1052,77 @@ p4 <- ggplot(figure3_d4_df, aes(x = midpoint, y = fluorescence_norm)) +
     panel.grid.minor.x = element_blank(),
     legend.position = "none",
     plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+p4
+```
+
+### repeat for DENV4 with edits
+```{r}
+figure3_d4_df <- figure3_df |> 
+  filter(serotype == "d4", timepoint %in% c(1:5, "acute")) |>
+  mutate(
+    timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)),
+    
+    percentile_bin = case_when(
+      fluorescence_norm <= quantile(fluorescence_norm, 0.75, na.rm = TRUE) ~ "0–75%",
+      fluorescence_norm <= quantile(fluorescence_norm, 0.9, na.rm = TRUE) ~ "75–90%",
+      TRUE ~ "90–100%"
+    )
+  )
+
+p4 <- ggplot(figure3_d4_df, aes(x = midpoint, y = fluorescence_norm)) +
+
+  geom_rect(
+    data = protein_rects,
+    aes(xmin = start, xmax = end, ymin = ymin, ymax = ymax, fill = protein),
+    inherit.aes = FALSE,
+    alpha = 0.8
+  ) +
+
+  geom_point(aes(color = percentile_bin), size = 0.3, alpha = 1.0) +
+
+  geom_text(
+    data = protein_positions,
+    aes(
+      x = (start + end) / 2,
+      y = max(figure3_d4_df$fluorescence_norm, na.rm = TRUE) * 1.05,  
+      label = protein
+    ),
+    inherit.aes = FALSE,
+    size = 2,
+    fontface = "bold",
+    vjust = -0.2  
+  ) +
+
+  facet_wrap(~ timepoint, ncol = 1, scales = "free_y") +
+
+  scale_fill_brewer(palette = "Spectral", name = "Protein", guide = "none") +
+
+  scale_color_manual(
+    values = c("0–75%" = "gray80", "75–90%" = "gray40", "90–100%" = "black"),
+    name = "Reactivity Percentile"
+  ) +
+
+  scale_x_continuous(breaks = seq(0, 3400, 500)) +
+
+  labs(
+    x = "Proteome Position",
+    y = "Signal Intensity (AU)",
+    title = "DENV4 Immunoreactivity Across Proteome"
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.title.x.bottom = element_text(margin = margin(t = 10)),
+    axis.text.x.bottom = element_text(size = 10),
+    axis.title.x.top = element_blank(),
+    axis.text.x.top = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 16)
   )
 
 p4
