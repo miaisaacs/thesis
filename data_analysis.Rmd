@@ -29,6 +29,10 @@ library(dunn.test)
 library(gridExtra)
 library(caret)
 library(forcats)
+library(emmeans)
+library(future)
+library(furrr)
+library(broom.mixed)
 ```
 
 ### view dataset
@@ -1491,7 +1495,6 @@ p10 <- ggplot(figure3_nc_df, aes(x = midpoint, y = fluorescence_norm, color = se
 p10
 ```
 
-
 ## linear mixed effects models
 
 ### relevel so acute is reference
@@ -1688,6 +1691,51 @@ ggplot(
     x = "Timepoint",
     color = "Probe"
   )
+```
+
+### running LMMs for each peptide
+```{r}
+valid_peptides <- summary_peptides$sequence
+
+filtered_df <- basic_model_df |>  filter(sequence %in% valid_peptides)
+
+results <- list()
+
+for (pep in valid_peptides) {
+  df_pep <- filtered_df |>  filter(sequence == pep)
+
+  model <- tryCatch({
+    lmer(fluorescence_log ~ serotype + (1 | patient_id), data = df_pep)
+  }, error = function(e) NULL)
+
+  if (!is.null(model)) {
+    coefs <- summary(model)$coefficients
+    coefs_df <- as.data.frame(coefs)
+    coefs_df$sequence <- pep
+    coefs_df$term <- rownames(coefs_df)
+    results[[pep]] <- coefs_df
+  }
+}
+
+flat_results <- bind_rows(results)
+```
+
+### add p-values
+```{r}
+flat_results <- flat_results |> 
+  mutate(p.value = 2 * (1 - pnorm(abs(`t value`))))
+
+summary_df <- flat_results |> 
+  filter(term != "(Intercept)")
+```
+
+### summarize results into a df
+```{r}
+top_peptides_df <- summary_df |> 
+  group_by(sequence) |> 
+  slice_min(p.value, n = 1) |> 
+  ungroup() |> 
+  slice_min(p.value, n = 20)  
 ```
 
 ## assessing significance
