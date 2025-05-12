@@ -33,6 +33,7 @@ library(emmeans)
 library(future)
 library(furrr)
 library(broom.mixed)
+library(RColorBrewer)
 ```
 
 ### view dataset
@@ -1693,11 +1694,23 @@ ggplot(
   )
 ```
 
+### filter for reactivity to multiple serotypes and sample sized
+```{r}
+summary_peptides <- basic_model_df |> 
+  group_by(sequence) |> 
+  summarise(n_patients = n_distinct(patient_id), n_serotypes = n_distinct(serotype)) |> 
+  filter(n_patients >= 3, n_serotypes >= 2)
+
+nrow(summary_peptides)
+```
+
 ### running LMMs for each peptide
 ```{r}
 valid_peptides <- summary_peptides$sequence
 
-filtered_df <- basic_model_df |>  filter(sequence %in% valid_peptides)
+filtered_df <- basic_model_df |>  
+  filter(sequence %in% valid_peptides, 
+         serotype %in% c("d1", "d2", "d3", "d4"))
 
 results <- list()
 
@@ -1732,10 +1745,50 @@ summary_df <- flat_results |>
 ### summarize results into a df
 ```{r}
 top_peptides_df <- summary_df |> 
+  filter(Estimate > 0) |>                    
   group_by(sequence) |> 
-  slice_min(p.value, n = 1) |> 
+  slice_min(p.value, n = 1, with_ties = FALSE) |> 
   ungroup() |> 
-  slice_min(p.value, n = 20)  
+  arrange(p.value) |> 
+  slice_head(n = 10)
+
+view(top_peptides_df)
+```
+
+### format into table
+```{r}
+protein_map_df <- basic_model_df |> 
+  select(sequence, protein) |> 
+  distinct()
+
+top_peptides_df <- top_peptides_df |> 
+  left_join(protein_map_df, by = "sequence")
+
+top_peptides_df |> 
+  select(
+    Peptide = sequence,
+    Protein = protein,
+    Estimate,
+    `Standard Error` = `Std. Error`,
+    `t-value` = `t value`,
+    `p-value` = p.value
+  ) |> 
+  mutate(
+    Estimate = round(Estimate, 3),
+    `Standard Error` = round(`Standard Error`, 3),
+    `t-value` = round(`t-value`, 2),
+    `p-value` = format.pval(`p-value`, digits = 3, eps = 1e-4)
+  ) |> 
+  kable(
+    caption = "Top 10 IgG-Reactive DENV Peptides",
+    align = "lcccccc",
+    format = "html"
+  ) |> 
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center"
+  )
 ```
 
 ## assessing significance
@@ -1743,103 +1796,144 @@ top_peptides_df <- summary_df |>
 ### filtering df to final seven sequences
 ```{r}
 sequences_to_keep <- c(
-  "SVALAPHVGLGL",
-  "SNELNHILLEND",
-  "KAKIIGADVQNT",
-  "NTTTDSRCPTQG",
-  "EMIIPKIYGGPI",
-  "KYSWKSWGKAKI",
-  "RKLCIEAKISNT"
+  "AAIDGEYRLRGE", "ADSPKRLSAAIG", "AIDGEYRLRGEA", "AKISNTTTDSRC", "AMDLGELCEDTM",
+  "AMEELPDTIETL", "AMHTALTGATEI", "AMTDTTPFGQQR", "ARTYSDPLALRE", "ATLVEEQDTNFV"
 )
 
 significance_df <- final_df_long |> 
   filter(sequence %in% sequences_to_keep)
-
-view(head(significance_df, 100))
 ```
 
 ### assessing sens, spec, accuracy, auc, PPV, and NPV
 ```{r}
 results <- data.frame()
 
-for (seq in unique_sequences) {
+for (seq in sequences_to_keep) {
   
   temp <- significance_df %>% filter(sequence == seq)
   
-  temp$hit_yn <- as.factor(temp$hit_yn)
-  levels(temp$hit_yn) <- c(0,1)
-  
+  temp$hit_yn <- factor(temp$hit_yn, levels = c(0, 1))
   prediction <- ifelse(temp$mfi_adjusted > temp$threshold, 1, 0)
-  prediction <- as.factor(prediction)
-  levels(prediction) <- c(0,1)
+  prediction <- factor(prediction, levels = c(0, 1))
   
   cm <- confusionMatrix(prediction, temp$hit_yn, positive = "1")
-
   roc_obj <- roc(temp$hit_yn, temp$mfi_adjusted)
-  auc_value <- as.numeric(auc(roc_obj))
   
   results <- rbind(results, data.frame(
     sequence = seq,
     sensitivity = cm$byClass['Sensitivity'],
     specificity = cm$byClass['Specificity'],
     accuracy = cm$overall['Accuracy'],
-    auc = auc_value,
+    auc = as.numeric(auc(roc_obj)),
     ppv = cm$byClass['Pos Pred Value'],
     npv = cm$byClass['Neg Pred Value']
   ))
 }
-
-rownames(results) <- NULL
-
-print(results)
 ```
 
 ### formatting results into a table
 ```{r}
-roc_list <- lapply(sequences_to_keep, function(seq) {
-  data_subset <- subset(significance_df, sequence == seq)
-  roc_obj <- roc(response = data_subset$hit_yn, predictor = data_subset$fluorescence_norm)
-  
-  roc_df <- data.frame(
-    specificity = rev(roc_obj$specificities),
-    sensitivity = rev(roc_obj$sensitivities),
-    sequence = seq,
-    auc = as.numeric(auc(roc_obj)) 
+results_clean <- results %>%
+  mutate(
+    across(c(sensitivity, specificity, accuracy, auc, ppv, npv), round, digits = 3)
+  ) %>%
+  rename(
+    Sequence = sequence,
+    Sensitivity = sensitivity,
+    Specificity = specificity,
+    Accuracy = accuracy,
+    AUC = auc,
+    PPV = ppv,
+    NPV = npv
   )
-  
-  return(roc_df)
-})
 
-roc_df_all <- bind_rows(roc_list)
-
-auc_labels <- roc_df_all |> 
-  group_by(sequence) |> 
-  summarise(auc = first(auc))
-
-ggplot(roc_df_all, aes(x = 1 - specificity, y = sensitivity, color = sequence)) +
-  geom_line(linewidth = 1.2) +
-  geom_abline(linetype = "dashed", color = "gray") +
-  facet_wrap(~ sequence, ncol = 3) +
-  theme_minimal() +
-  labs(
-    title = "ROC Curves for All Peptides",
-    x = "1 - Specificity",
-    y = "Sensitivity",
-    color = "Peptide"
-  ) +
-  geom_text(
-    data = auc_labels,
-    aes(x = 0.6, y = 0.2, label = paste0("AUC = ", round(auc, 3))),
-    inherit.aes = FALSE,
-    size = 3.5
-  ) +
-  theme(
-    strip.text = element_text(face = "bold"),
-    plot.title = element_text(hjust = 0.5),
-    legend.position = "none"
-  ) +
-  scale_color_brewer(palette = "Dark2")
+results_clean %>%
+  kable("html", caption = "Predictive Performance for Selected Peptides") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE,
+                position = "center")
 ```
+
+### make heatmap showing reactivities for each peptide across timepoints
+```{r}
+significance_df$timepoint <- factor(significance_df$timepoint, levels = c("acute", "1", "2", "3", "4"))
+
+significance_df <- significance_df |>
+  filter(!is.na(timepoint))
+
+heatmap_df <- significance_df |>
+  group_by(sequence, timepoint) |>
+  summarize(mean_fluorescence = mean(fluorescence_norm, na.rm = TRUE), .groups = "drop")
+
+ggplot(heatmap_df, aes(x = timepoint, y = sequence, fill = mean_fluorescence)) +
+  geom_tile(color = "white") +
+  scale_fill_distiller(palette = "Spectral", direction = -1, name = "Mean Fluorescence") +
+  labs(
+    x = "Timepoint",
+    y = "Peptide Sequence",
+    title = "Mean Signal Intensity (AU) of Selected Peptides"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
+```
+
+### same heatmap but by serotype also
+```{r}
+significance_df$timepoint <- factor(significance_df$timepoint, levels = c("acute", "1", "2", "3", "4"))
+
+significance_df <- significance_df |>
+  mutate(serotype = str_to_upper(serotype)) |>
+  filter(serotype %in% c("D1", "D2", "D3", "D4"), !is.na(timepoint))
+
+heatmap_df <- significance_df |>
+  group_by(sequence, timepoint, serotype) |>
+  summarize(mean_fluorescence = mean(fluorescence_norm, na.rm = TRUE), .groups = "drop")
+
+ggplot(heatmap_df, aes(x = timepoint, y = sequence, fill = mean_fluorescence)) +
+  geom_tile(color = "white") +
+  scale_fill_distiller(palette = "Spectral", direction = -1, name = "Mean Fluorescence") +
+  labs(
+    x = "Timepoint",
+    y = "Peptide Sequence",
+    title = "Mean Signal Intensity (AU) of Selected Peptides"
+  ) +
+  facet_wrap(~ serotype, scales = "free_y", ncol = 1) + 
+  theme_minimal(base_size = 10) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
+```
+
+### create boxplots by serotype and timepoint
+```{r}
+filtered_df <- significance_df |>
+  filter(serotype %in% c("d1", "d2", "d3", "d4"))
+
+plot_df <- filtered_df |>
+  group_by(sequence, timepoint, serotype) |>
+  summarize(mean_fluorescence = mean(fluorescence_norm, na.rm = TRUE), .groups = "drop")
+
+ggplot(plot_df, aes(x = timepoint, y = mean_fluorescence, color = serotype, group = serotype)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_color_brewer(palette = "Spectral", name = "Serotype") +
+  facet_wrap(~ sequence, scales = "fixed") +
+  labs(
+    x = "Timepoint",
+    y = "Mean Fluorescence",
+    title = "Mean Fluorescence Over Time by Serotype and Peptide"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
+```
+
 
 ### run Kolmogorov-Smirnov test for normality
 ```{r}
