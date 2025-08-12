@@ -34,6 +34,7 @@ library(future)
 library(furrr)
 library(broom.mixed)
 library(RColorBrewer)
+library(writexl)
 ```
 
 ### view dataset
@@ -333,6 +334,37 @@ probe_annotations <- denv1_protein_regions |>
   )
 
 view(head(probe_annotations, 10))
+```
+
+### import annotations for DENV2
+```{r}
+denv2_protein_regions <- read.csv("data/DENV2_annotations.csv") |> 
+  janitor::clean_names()
+
+DENV2_annotations <- denv2_protein_regions |> 
+  mutate(document_name = as.character(document_name)) |>
+  filter(
+    !grepl("source dengue virus", name, ignore.case = TRUE),
+    !grepl("Search Hit", name, ignore.case = TRUE),
+    !grepl("POLY CDS", name, ignore.case = TRUE),
+    !grepl("polyprotein", name, ignore.case = TRUE)
+  ) |> 
+  group_by(document_name) |> 
+  distinct(document_name, .keep_all = TRUE) |> 
+  ungroup() |> 
+  mutate(
+    protein = str_extract(name, "NS\\d+[A-Z]?|[CEP][^ ]*|prM"),
+    sequence = str_replace_all(sequence, "\\.\\.\\.", "")
+  ) |> 
+  select(
+    probe = document_name,
+    sequence,
+    start = min_original_sequence,
+    end = max_original_sequence,
+    protein
+  )
+
+view(head(DENV2_annotations, 10))
 ```
 
 ### merge geneious data with processed data
@@ -738,6 +770,84 @@ p <- ggplot(figure3_d1_df, aes(x = midpoint, y = fluorescence_norm)) +
   )
 
 p
+```
+
+### changing colors of points for visibility
+```{r}
+figure3_d1_df <- figure3_df |> 
+  filter(serotype == "d1", timepoint %in% c(1:5, "acute")) |>
+  mutate(
+    timepoint = ifelse(timepoint == "acute", "Acute", paste0("T", timepoint)),
+    
+    percentile_bin = case_when(
+      fluorescence_norm <= quantile(fluorescence_norm, 0.75, na.rm = TRUE) ~ "0–75%",
+      fluorescence_norm <= quantile(fluorescence_norm, 0.9, na.rm = TRUE) ~ "75–90%",
+      TRUE ~ "90–100%"
+    )
+  )
+
+p <- ggplot(figure3_d1_df, aes(x = midpoint, y = fluorescence_norm)) +
+
+  geom_rect(
+    data = protein_rects,
+    aes(xmin = start, xmax = end, ymin = ymin, ymax = ymax, fill = protein),
+    inherit.aes = FALSE,
+    alpha = 0.8
+  ) +
+
+  geom_point(aes(color = percentile_bin), size = 0.1, alpha = 1.0) +
+
+  geom_text(
+    data = protein_positions,
+    aes(
+      x = (start + end) / 2,
+      y = max(figure3_d1_df$fluorescence_norm, na.rm = TRUE) * 1.05,
+      label = protein
+    ),
+    inherit.aes = FALSE,
+    size = 2,
+    fontface = "bold",
+    vjust = -0.2
+  ) +
+
+  facet_wrap(~ timepoint, ncol = 1, scales = "free_y") +
+
+  scale_fill_brewer(palette = "Spectral", name = "Protein", guide = "none") +  
+
+  scale_color_manual(
+    values = c("0–75%" = "#8da0cb", "75–90%" = "#fc8d62", "90–100%" = "#66c2a5"),
+    name = "Reactivity Percentile"
+  ) +
+
+  scale_x_continuous(breaks = seq(0, 3400, 500)) +
+
+  labs(
+    x = "Proteome Position",
+    y = "Signal Intensity (AU)",
+    title = "DENV1 Immunoreactivity Across Proteome"
+  ) +
+
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.title.x.bottom = element_text(margin = margin(t = 10)),
+    axis.text.x.bottom = element_text(size = 10),
+    axis.title.x.top = element_blank(),
+    axis.text.x.top = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+p
+```
+
+### export data frame to excel
+```{r}
+df_export1 <- figure3_d1_df[, !names(figure3_d1_df) %in% c("probe", "threshold", "mfi_adjusted", "hit_yn", "midpoint")]
+
+write_xlsx(df_export1, "figure3_d1_filtered.xlsx")
 ```
 
 ### repeat for DENV2
