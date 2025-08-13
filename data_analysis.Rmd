@@ -606,6 +606,34 @@ protein_positions <- tibble(
 )
 ```
 
+### repeat for DENV 2-4
+```{r}
+protein_positions2 <- tibble(
+  protein = c("C", "prM", "E", "NS1", "NS2A", "NS2B", 
+              "NS3", "NS4A", "NS4B", "NS5"),
+  start = c(1, 115, 281, 776, 1128, 1346, 1476, 2094, 2221, 2492),
+  end   = c(114, 280, 775, 1127, 1345, 1475, 2093, 2220, 2491, 3391)
+)
+```
+
+```{r}
+protein_positions3 <- tibble(
+  protein = c("C", "prM", "E", "NS1", "NS2A", "NS2B", 
+              "NS3", "NS4A", "NS4B", "NS5"),
+  start = c(1, 115, 281, 774, 1126, 1344, 1474, 2093, 2220, 2491),
+  end   = c(114, 280, 773, 1125, 1343, 1473, 2092, 2219, 2490, 3390)
+)
+```
+
+```{r}
+protein_positions4 <- tibble(
+  protein = c("C", "prM", "E", "NS1", "NS2A", "NS2B", 
+              "NS3", "NS4A", "NS4B", "NS5"),
+  start = c(1, 114, 280, 775, 1127, 1345, 1475, 2093, 2220, 2488),
+  end   = c(113, 279, 774, 1126, 1344, 1474, 2092, 2219, 2487, 3387)
+)
+```
+
 ### set colors for proteins
 ```{r}
 protein_colors <- c(
@@ -772,7 +800,7 @@ p <- ggplot(figure3_d1_df, aes(x = midpoint, y = fluorescence_norm)) +
 p
 ```
 
-### changing colors of points for visibility
+### changing colors of points for visibility (need to discuss colors)
 ```{r}
 figure3_d1_df <- figure3_df |> 
   filter(serotype == "d1", timepoint %in% c(1:5, "acute")) |>
@@ -850,7 +878,7 @@ df_export1 <- figure3_d1_df[, !names(figure3_d1_df) %in% c("probe", "threshold",
 write_xlsx(df_export1, "figure3_d1_filtered.xlsx")
 ```
 
-### repeat for DENV2
+### repeat for DENV2 (previous version without gradient)
 ```{r}
 figure3_d2_df <- figure3_df |> 
   filter(serotype == "d2", timepoint %in% c(1:5, "acute")) |> 
@@ -868,7 +896,7 @@ p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
   geom_point(size = 0.2, alpha = 1.0, color = "black") +
 
   geom_text(
-    data = protein_positions,
+    data = protein_positions2,
     aes(
       x = (start + end) / 2,
       y = max(figure3_d2_df$fluorescence_norm, na.rm = TRUE) * 1.05,  
@@ -910,7 +938,7 @@ p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
 p2
 ```
 
-### repeat with edits for denv2
+### repeat with edits for denv2 (protein positions adjusted)
 ```{r}
 figure3_d2_df <- figure3_df |> 
   filter(serotype == "d2", timepoint %in% c(1:5, "acute")) |> 
@@ -936,7 +964,7 @@ p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
   geom_point(aes(color = percentile_bin), size = 0.3, alpha = 1.0) +
 
   geom_text(
-    data = protein_positions,
+    data = protein_positions2,
     aes(
       x = (start + end) / 2,
       y = max(figure3_d2_df$fluorescence_norm, na.rm = TRUE) * 1.05,
@@ -981,7 +1009,7 @@ p2 <- ggplot(figure3_d2_df, aes(x = midpoint, y = fluorescence_norm)) +
 p2
 ```
 
-### repeat for denv3
+### repeat for denv3 (previous version)
 ```{r}
 figure3_d3_df <- figure3_df |> 
   filter(serotype == "d3", timepoint %in% c(1:5, "acute")) |> 
@@ -1041,7 +1069,7 @@ p3 <- ggplot(figure3_d3_df, aes(x = midpoint, y = fluorescence_norm)) +
 p3
 ```
 
-### repeat for DENV3 with edits
+### repeat for DENV3 with edits (protein positions adjusted)
 ```{r}
 figure3_d3_df <- figure3_df |> 
   filter(serotype == "d3", timepoint %in% c(1:5, "acute")) |> 
@@ -1067,7 +1095,7 @@ p3 <- ggplot(figure3_d3_df, aes(x = midpoint, y = fluorescence_norm)) +
   geom_point(aes(color = percentile_bin), size = 0.3, alpha = 1.0) +
 
   geom_text(
-    data = protein_positions,
+    data = protein_positions3,
     aes(
       x = (start + end) / 2,
       y = max(figure3_d3_df$fluorescence_norm, na.rm = TRUE) * 1.05,
@@ -1112,7 +1140,7 @@ p3 <- ggplot(figure3_d3_df, aes(x = midpoint, y = fluorescence_norm)) +
 p3
 ```
 
-### repeat for DENV4
+### repeat for DENV4 (previous version)
 ```{r}
 figure3_d4_df <- figure3_df |> 
   filter(serotype == "d4", timepoint %in% c(1:5, "acute")) |>
@@ -1172,7 +1200,7 @@ p4 <- ggplot(figure3_d4_df, aes(x = midpoint, y = fluorescence_norm)) +
 p4
 ```
 
-### repeat for DENV4 with edits
+### repeat for DENV4 with edits (protein positions adjusted)
 ```{r}
 figure3_d4_df <- figure3_df |> 
   filter(serotype == "d4", timepoint %in% c(1:5, "acute")) |>
@@ -1198,7 +1226,7 @@ p4 <- ggplot(figure3_d4_df, aes(x = midpoint, y = fluorescence_norm)) +
   geom_point(aes(color = percentile_bin), size = 0.3, alpha = 1.0) +
 
   geom_text(
-    data = protein_positions,
+    data = protein_positions4,
     aes(
       x = (start + end) / 2,
       y = max(figure3_d4_df$fluorescence_norm, na.rm = TRUE) * 1.05,  
@@ -1243,6 +1271,7 @@ p4 <- ggplot(figure3_d4_df, aes(x = midpoint, y = fluorescence_norm)) +
 p4
 ```
 
+## (all plots below have DENV1 reference, should be edited if needed for manuscript)
 ### repeat for DENV3/DENV4
 ```{r}
 figure3_d3d4_df <- figure3_df |> 
